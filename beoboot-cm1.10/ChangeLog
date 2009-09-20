@@ -1,0 +1,277 @@
+Changes from cm1.9 to cm1.10
+
+	* Fixed vmadlib so that it link 32 bit or 64 bit libraries no
+	matter how it's built.
+
+	* Sucked in the cmconf stuff so it doesn't need an external
+	library anymore.
+
+	* Added option to say LINUX= to avoid trying to build the kernel
+	module.
+
+	* Updated device scanning code to use the "alias" lines that are
+	part of the modinfo in new driver modules.
+
+	* Updated scanning code to use sysfs instead of the stuff in
+	/proc.  This is a cleaner and more device independent way of doing
+	things.
+
+	* Added support for scanning for stuff other than PCI.  Currently
+	PCI and USB are supported.  Others should be easy to add.
+
+	* Device scanning keeps happening even after RARPing has started.
+	This should provide a rudimentary hot plug support.
+
+	* Added --usb option to beoboot to suck in USB host drivers.
+
+	* Changed makefiles to keep install directories sane on multiple
+	architectures.
+
+	* Added working kmod.so module for node_up.  It's a little
+	different than before.  It's no longer wired to fetch since that
+	can put a lot of load on the front end.  All modules to be loaded
+	must be provided on the command line.
+
+	* Removed pciprobe module.  If this is implemented again, it will
+	have to be significantly different than before since we're not
+	dealing in our own lists of PCI ids.
+
+	* Added patch to make rc script automatically stop/restart bjs if
+	it's running.  Thanks Michal Jaegermann.
+
+	* Added fix so that nodeinfo will pickup cpu MHz and processor
+	count on AMD64.  Thanks Michal Jaegermann.
+
+	* Added a patch to fix setting of broadcast addresses from Michal
+	Jaegermann.
+
+	* Deprecated the use of rc.clustermatic for setting addresses on
+	network interfaces.  It replicates existing configuration provided
+	by whatever distribution this is running on.
+
+	* Added patch from Michal Jaegermann to allow you to override the
+	kernel version on the beoboot command line.
+
+	* Made insmod and modprobe equivalent.  They pretty much were anyway.
+
+	* Small changes to work with SuSE's kernel build system.
+
+Changes from cm1.8 to cm1.9
+
+	* Added kernel size over flow patch from Eric Biederman.
+
+	* Moved phase2_last hook to be after the file system cleanup.
+
+	* Fixed 'bootfile' so that the node argument works correctly with
+	sparse node ranges.
+	
+	* Fixed default node number counting problems that forced people
+	to explicitly specify node numbers in 'node' lines.
+
+	* Fixed bug in node_up that would cause it to hang if it failed to
+	create any child processes.
+
+	* Added code to the GM plugin to try and set the GM host name on
+	the node.  Note that this doesn't currently handle multiple units
+	correctly.
+
+	* Added "exec" node_up plugin from Joshua Aune of Linux Networx.
+
+	* Ported to Linux 2.6.5
+
+	* Changed initrds from romfs to cpio for Linux 2.6.5 initramfs.
+
+	* Removed pci related configuration in favor of in-module PCI ids.
+
+	* Added add El Torito (-e) as an output format on beoboot.
+
+	* Removed libmodutils related goofiness from the node_up program.
+
+Changes from cm1.7 to cm1.8
+	
+	* Fixes for architecture mixups on x86-64.  This is a confusing
+	case because you use a 32-bit phase 1.
+
+	* Updated rc scripts so that they can work on SuSE as well as Red
+	Hat and Yellowdog.
+
+	* Added more path mangling for x86_64 and SuSE.
+
+Changes from cm1.6 to cm1.7
+
+	* Added support in node_up.conf to ignore failure of specific
+	plugins.  (Add "failok" prefix to a plugin line in node_up.conf)
+
+	* Fixed bug in module dependency code in "beoboot" that could
+	cause modules to get left out when building boot images.  This
+	code also got a general cleanup.
+
+	* Changed default configuration directory from /etc/beowulf to
+	/etc/clustermatic.
+
+	* Changed the "service" name to "clustermatic".
+
+	* Added an errno stub to fix linking problems on Red Hat 9.
+	(libmodutils is linked against a different libc on RH9.)  This
+	should be harmless when using any recent glibc.
+
+	* Changed the default configuration directory from /etc/beowulf to
+        /etc/clustermatic.  (Yes, we re-branded this thing yet again...)
+
+Changes from cm 1.5 to cm 1.6
+
+	* Fixed default permissions on /.
+
+	* Fixed vmadlib node_up plugin bug which caused the ldconfig code
+	to ignore some libraries.
+
+	* Fixed a problem with the initrd image not being freed on the
+	slave node.
+
+	* Removed remnants of file caching stuff.
+
+	* Modified RARP daemon to allow for sparse node ranges.  The
+	"nodes" configuration option is no longer required.
+
+	* Added "ifdup" node_up module from
+	Joshua Aune <luken@linuxnetworx.com>
+
+	* Added retry with backoff behavior to NFS mounts in the setupfs
+	node_up module.
+
+	* Updated GM plugin for GM2.  (It only works on GM 2 now)
+
+	* Fixed bug in miscfiles - it didn't reset ignore_missing and
+	follow_symlink every time.  Thanks Larry Baker <baker@usgs.gov>
+
+	* Modified beoboot to try and automatically figure out which
+	modules should be included in the boot image based on the PCI
+	table and what's in /lib/modules/kernel/drivers/net.  The
+	bootmodule option can still force additional modules to be added.
+	Also, this behavior can be turned off with --noautomod.
+
+	* Modified the "nodeinfo" node_up module to use to use bpfs file
+	attributes instead of /var/beowulf/nodeinfo.  The nodeinfo library
+	is no longer required.
+
+	* Fixed a few file descriptor leaks in the boot program.
+	
+Changes from cm 1.4 to cm 1.5
+
+	* Fixed setupfs problem which prevented mounts from physical
+	devices from working.  Patch from Willem Schreuder
+	<willem@prinmath.com>
+
+	* Fixed problem in the multicast sender that could cause clients
+	(slave nodes) to get stuck requesting the same file over and over
+	again.
+
+	* Added a node_up module to set sysctl options.
+
+	* Updated the GM module to set the GM host name.
+
+	* Fixed a nodeup bug that would cause it to spin if new nodeup
+	connections come in while a bunch of nodeup processes are running.
+
+	* Slowed down "." printing during RARP to keep console logging on
+	large clusters sensible.
+
+	* Added a hook system to make adding system specific stuff
+	(e.g. our GM route requester) to the boot program easy.  Note that
+	this stuff is still in its infancy and will probably be modified
+	somewhat before becoming permanent.
+
+	* Replaced the multicast boot image download scheme with a tree
+	based unicast image downloader.
+
+	* Added some back-off on RARP requests to try and keep from
+	hammering networks too hard.
+
+	* Fixed beoboot problem that could cause symlinks to be copied as
+	symlinks when collecting modules for boot images.
+
+	* Removed threading from the node setup server - improved
+	performance as a result.
+
+	* Removed phase "3" bogosity and provided both phase 1 & 2 with a
+	writable root filesystem.  Note that phase 1 now requires tmpfs
+	support in the kernel.
+
+Changes from lanl 1.3 to cm 1.4
+
+	* Added "nodeadd" program (/usr/lib/beoboot/bin) to facilitate
+	automagically adding new nodes to /etc/beowulf/config.
+
+	* Removed configuration reading and node database code.  That code
+	is now part of "cmtools".  cmtools is now required to build
+	beoboot.
+
+	* Squashed errors from find in rc.beowulf.  This was mostly to
+	hide the non-existent library case.
+
+Changes from lanl 1.2 to lanl 1.3
+
+	* Replaced giant and hideously ugly "node_up" shell script with a
+	plug-in style program and collection of modules.  This minimizes
+	the number of processes and process migration at boot time.
+
+	* Cleaned up some of the multicast send/receive code a bit.  It's
+	still a big hack.
+
+	* Fixed a beoboot bug which caused it to not find modules required
+	for the boot image if symlinks are involved.
+
+Changes from lanl 1.1 to lanl 1.2
+
+	* Fixed a two kernel monte issue with protected mode operation and
+	succesfully finding the real mode setup code.  MONTE_PROTECTED
+	unfortunately requires a kernel patch in the first kernel now.
+
+	* Removed most of the BProc dependencies.
+
+	* Made kver statically linked to reduce the problems.
+
+	* Added chkswap improvements from Rick Niles <niles@scyld.com>
+
+	* Added in some script updates from Scyld.
+
+	* Added in supermon support at image build time.
+
+	* Reworked make files to allow for no two kernel monte support.
+	(i.e. on ppc)
+
+Changes from lanl 1.0 to lanl 1.1
+
+	* Fix permission problems with multicast file transport.  It now
+	preserves permissions and file ownership.  This changed the
+	protocol a bit.
+
+	* Added support for selecting a boot image based on node number.
+	The bootfile directive now accepts a node number or range of node
+	numbers (i.e. 5-10,12) before the boot file name.
+
+	* Fixed misc script problems arrising from multiple MAC addresses.
+
+Changes from Scyld beoboot 1.1.16 to beoboot-lanl 1.0
+	* Matches BProc 3.1.2
+
+	* Support for multicast file transfer w/ the BProc 3.1.x file
+	request mchanism.
+
+	* Support in daemons for new configuration language which allows
+	multiple IP addresses per node and multiple MAC addresses per
+	node.
+
+	* Alpha support in Two Kernel Monte.
+
+	* Many small bugfixes in the "beoboot" script.
+
+	* Updated and cleaned up for Linux 2.4.x - many small bugfixes.
+
+	* tmpfs is used wherever possible during node boot.
+
+	* Version checking on RARP requests to avoid answering requests
+	for other architectures, etc.
+
+	* mkbootimg produces different images - multi-architecture capable
+	not and not nearly as bad an intel-only kludge.

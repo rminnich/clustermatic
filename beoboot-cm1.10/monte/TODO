@@ -1,0 +1,15 @@
+To-do:
+
+ * Error checking for large kernels built as small?
+
+ * Check out this reboot notifier call chain thing.
+
+Features:
+
+ * Be able to read a kernel/initrd from a user's memory space.
+
+ * Have some way of concatenating a kernel image and a ram disk image.
+
+ * Grok VGA arguments to the kernel.  (This stuff seems totally hosed
+   these days...)
+

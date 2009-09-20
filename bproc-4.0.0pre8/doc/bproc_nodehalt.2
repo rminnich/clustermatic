@@ -1,0 +1,41 @@
+.\" $Id: bproc_nodehalt.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODEHALT 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodehalt \- ask a slave daemon to halt the machine
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodehalt\fR(int \fInode\fR);
+
+int \fBbproc_nodehalt_async\fR(int \fInode\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_nodehalt\fR asks a slave daemon to halt
+itself.  \fBbproc_nodehalt\fR will wait for a response from the
+slave node before returning.  \fBbproc_nodehalt_async\fR is
+identical except that it will return immediately.
+
+.SH RETURN VALUE
+.PP
+On  success,  zero  is returned.  On error, \-1 is returned
+and errno is set appropriately.
+
+.SH ERRORS
+.TP
+\fBEPERM\fR
+The calling process does not have permission to
+move to node.  You must be the superuser to use \fBbproc_nodehalt\fR.
+.TP
+\fBEINVAL\fR
+\fInode\fR is an invalid node number or
+\fInode\fR is down.
+.TP
+\fBEBUSY\fR
+The BProc system is not running.
+
+.SH SEE ALSO
+.PP
+\fBbproc_nodereboot\fR(2),
+\fBbproc_nodepwroff\fR(2)
+

@@ -1,0 +1,52 @@
+.TH NODE_UP 8 "" "Beoboot cm1.10" "Beoboot Administrator's Manual"
+.SH NAME
+node_up \- The beoboot node setup program
+
+.SH SYNOPSIS
+/usr/lib/beoboot/bin/node_up
+
+.SH DESCRIPTION
+node_up is the beoboot node setup program.  When a node connects to
+the BProc master daemon, node_up migrates to the remote node and
+performs the steps necessary to configure the remote node.
+
+node_up can be run in a stand\-alone mode (\-s) or by beoserv.
+beoserv will aggregate many node setup requests and run node_up in
+parallel.
+
+.TP
+\-h
+Display a help message and exit.
+.TP
+\-V
+Display version information and exit.
+.TP
+\-p \fIpath\fR
+Use \fIpath\fR as the plugin path instead of the one in the
+configuration file.
+.TP
+\-S
+Report process size.  The process size is the number of bytes sent
+during process migration.
+.TP
+\-s
+Run in stand-alone mode.  Normally node_up will connect to beoserv to
+do the setup so that multiple requests can be aggregated.  In
+stand-alone mode, the node_up program performs the setup directly
+without trying to aggregate requests.
+.TP
+\-C \fIfile\fR
+Use \fIfile\fR as the configuration file instead of the default.
+.TP
+\-u
+Set node state to up upon successful completion.
+.TP
+\-l \fIlevel\fR
+Set logging level to \fIlevel\fR.  The log level is an integer from 0
+to 4.  The higher the log level, the more messages node_up will
+produce.
+
+.SH SEE ALSO
+\fBbeoserv\fR(8)
+
+

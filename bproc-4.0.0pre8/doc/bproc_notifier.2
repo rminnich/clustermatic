@@ -1,0 +1,38 @@
+.\" $Id: bproc_notifier.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NOTIFIER 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_notifier \- get BProc notifier file descriptor
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_notifier\fR(void);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_notifier\fR returns a file descriptor that will
+become ready for reading whenever a BProc system configuration change
+takes place.  Such changes include node status changes such as going
+up or down or master daemon configuration reloads.
+
+When a notification takes place, the file descriptor will become
+ready for reading.  Perform a \fBread\fR to acknowledge this
+clear the ready for read state.
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_notifier\fR will return a file
+descriptor number.  On error, \fBbproc_notifier\fR will return \-1
+and errno will be set appropriately.
+
+.SH ERRORS
+.PP
+\fBbproc_notifier\fR can return any of the erros that \fBopen\fR(2)
+can.
+
+.SH SEE ALSO
+.PP
+\fBopen\fR(2),
+\fBbproc_nodeinfo\fR(2),
+\fBbproc_nodelist\fR(2)
+

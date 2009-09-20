@@ -1,0 +1,89 @@
+.\" $Id: bpstat.1,v 1.4 2004/09/14 17:22:04 mkdist Exp $
+.TH BPSTAT 1 "" "BProc 4.0.0pre8" "BProc User's Manual"
+.SH NAME
+bpstat \- display machine status
+
+.SH SYNOPSIS
+\fBbpstat\fR \-h
+
+\fBbpstat\fR \-V
+
+\fBbpstat\fR \fInodespec ...\fR
+
+.SH DESCRIPTION
+.PP
+\fBbpstat\fR displays information about one or more nodes in the cluster.
+
+\fBbpstat\fR can only be used on the master node.
+
+The node specification can be any comma delimited combination of the
+following:
+.TP
+numbers
+e.g. 5, 11, 10
+.TP
+node ranges
+e.g.  5\-10 means 5,6,7,8,9 and 10
+.TP
+node states prefixed with "all"
+e.g.  "allup" means all nodes which are up and "allnotup" means all nodes which are not up.
+
+.PP
+General options:
+.TP
+\-h
+Print help information and exit.
+.TP
+\-V
+Print version information and exit.
+.TP
+\-c, \-\-compact
+Display a compact listing of nodes.  This is the default.
+.TP
+\-l, \-\-long
+Display a long listing nodes.  This listing has
+one line per node showing more information than the compact listing.
+.TP
+\-a, \-\-address
+Print the address of each node.
+.TP
+\-s, \-\-status
+Print the status of each node.
+.TP
+\-n, \-\-number
+Print the node number of each node.
+.TP
+\-t, \-\-total
+Just print the total number of nodes.
+
+.PP
+Sorting flags:
+.TP
+\-R, \-\-sort\-reverse
+Reverse the sort order.
+.TP
+\-S, \-\-sort\-status
+Sort nodes by node status.
+.TP
+\-N, \-\-sort\-number
+Sort nodes by node number.
+.TP
+\-O, \-\-keep\-order
+Do not sort the node list.
+
+.PP
+Misc options:
+.TP
+\-U, \-\-update
+Continuously update node status display.
+.TP
+\-L, \-\-lock
+locked mode for running on an unattended terminal.
+.TP
+\-p
+Display remote process state.
+
+.SH SEE ALSO
+.PP
+\fBbpsh\fR(1),
+\fBbpctl\fR(8)

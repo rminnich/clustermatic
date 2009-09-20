@@ -1,0 +1,89 @@
+% $Id: procacct.tex,v 1.2 2002/07/23 20:38:48 mkdist Exp $
+\chapter{Process Accounting}
+
+BProc adds some process accounting infrastructure on the slave nodes
+of the cluster.  Process accounting on the master is done using the
+normal UNIX process infrastructure.  The existing UNIX infrastructure
+is used to represent parent/child relationships on the slave node.
+The slave node is more complicated since any process running on the
+slave node may have parent and/or child processes which do not exist
+on the same node.  These cased need to be handled transparently.
+
+\section{Slave node process trees and \texttt{nlchild}}
+\index{\texttt{nlchild}}
+When a process running on a slave node calls \texttt{wait}, the child
+it is waiting on may or may not exist on the same node.  If the child
+does exist on the slave node, BProc should handle the wait locally to
+minimize the delay and involvement of the master node.  In order to
+know whether or not a \texttt{wait} can be handled locally, the slave
+node needs to know if a process has any children which exist on other
+nodes.  BProc introduces a child counting mechanism on the slave node
+to answer this question.
+
+In general the process accounting is setup with the following
+assumptions\footnote{These assumptions are violated by some of the
+thread group infrastructure which appeared in Linux 2.4.x.  BProc's
+behavior with programs that use those features is currently
+undefined.}:
+\begin{itemize}
+\item{No process (except init) will see an increase in its number of
+child processes without calling \texttt{fork} or \texttt{ptrace}}
+\item{No process will lose children without calling \texttt{wait}}\\
+\end{itemize}
+
+The PID masquerading code adds a counter on the slave node
+(\texttt{nlchild}) which counts the number of non-local children.  A
+non-local child is a child process which exists on another node and
+therefore isn't visible on the slave node.  When a process moves to a
+slave node, its total number of children is sent along with the move
+request.  When the process is inserted into the process tree on the
+new node, \texttt{nlchild} is initialized with the total number of
+children.  Then the parent process IDs of the other processes on the
+slave are inspected.  If any of those procesess are children of the
+process moving in, the parent process pointers and \texttt{nlchild}
+are updated accordingly.  The two assumptions above guarantee that the
+number of children will not change during a move.
+
+The \texttt{ptrace} attach would appear to violate the second
+assumption above since it appears to steal a child from another
+process.  It is true that for the purposes of \texttt{wait} the child
+becomes the child of the tracer.  BProc doesn't treat
+\texttt{ptrace} attach as a child removal because the child will
+always be given back when the process doing the trace detaches.
+
+% POSSIBLE (Linux) BUG:  What about wait()s initiated after a child
+% has been attached?  It seems we should be able to get an ECHLD here
+% when we shouldn't.
+
+\section{Parent processes, \texttt{child\_reaper} and \texttt{ptrace}}
+\index{\texttt{child\_reaper}}
+\index{\texttt{ptrace}}
+In most cases when a process migrates to a slave node, its parent
+process will not be present on the same node.  In this case, the BProc
+slave daemon will be the parent process in the slave's process tree.
+The \texttt{getppid} system call will still return the proper process
+ID.  \emph{The slave daemon is the parent process for any process
+whose real parent is not present.}  This allows the slave daemon to
+perform \texttt{ptrace} requests for remote processes.  If a process's
+parent process exits, it is reparented to the slave daemon, not the
+usual \texttt{child\_reaper} on the slave node.
+
+\section{Updating parent process IDs}
+
+When a process moves to a remote node, it takes its own process ID and
+its parent process ID with it.  The parent process may change during
+the life of the process.  For example a process running on a slave
+node may have a parent process which is running on the front end.  If
+the parent process exits, the remote process should have its parent
+process ID changed.
+
+\index{\texttt{PARENT\_EXIT}}
+The master sends out a single \texttt{PARENT\_EXIT} message when a
+process with ghost children exits on the master.  The master's kernel
+doesn't emit a message for every child because the number of children
+could potentially be \emph{very} large.  The master daemon then
+determines which nodes the message should be forwarded to.  The slave
+daemons then update the parent process IDs in their local process
+trees.
+
+% explanation of the negative PID hack.

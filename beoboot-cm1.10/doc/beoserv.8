@@ -1,0 +1,33 @@
+.TH BEOSERV 8 "" "Beoboot cm1.10" "Beoboot Administrator's Manual"
+.SH NAME
+beoserv \- Beoboot RARP and boot image server
+.SH SYNOPSIS
+\fBbeoserv\R [-h] [-V] [-f \fIconfigfile]
+.SH DESCRIPTION
+.PP
+\fBbeoserv\fR is the beoboot RARP and boot image server.  Operation of
+the server is controlled by a configuration file.  See
+\fBbeoboot_config\fR(8) for information on the configuration file.
+
+Once nodes come up, \fBbeoserv\fR also starts the node setup program
+(node_up).
+
+.TP
+\-h
+Display a help message and exit.
+.TP
+\-V
+Display version information and exit.
+.TP
+\-f \fIfile\fR
+Read server configuration from an alternate configuration file.
+.TP
+\-v
+Increase verbose level for debugging.  This option may be used more
+than once to get more debug information.  Using -v prevents the
+beoserv from becoming a daemon.
+
+.SH SEE ALSO
+\fBbeoboot_config\fR(5),
+\fBbeoboot\fR(8),
+\fBnode_up\fR(8)

@@ -1,0 +1,112 @@
+.\" $Id: bpsh.1,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPSH 1 "" "BProc 4.0.0pre8" "BProc User's Manual"
+.SH NAME
+bpsh \- run a command on a remote node
+
+.SH SYNOPSIS
+\fBbpsh\fR \-h
+
+\fBbpsh\fR \-v
+
+\fBbpsh\fR \fInodespec\fR \fIcommand\fR \fIarguments ...\fR
+
+\fBbpsh\fR \-a \fIcommand\fR \fIarguments ...\fR
+
+\fBbpsh\fR \-A \fIcommand\fR \fIarguments ...\fR
+
+.SH DESCRIPTION
+.PP
+\fBbpsh\fR executes \fIcommand\fR on the nodes given
+by \fInodespec\fR.  \fBbpsh\fR is designed to operate in a fashion
+similar to \fBrsh\fR.
+
+The node specification can be any comma delimited combination of the
+following:
+.TP
+numbers
+e.g. 5, 11, 10
+.TP
+node ranges
+e.g.  5\-10 means 5,6,7,8,9 and 10
+.TP
+node states prefixed with "all"
+e.g.  "allup" means all nodes which are up and "allnotup" means all nodes which are not up.
+.PP
+Listing the same node more than once will cause the command to get
+executed on that node more than once.  The remote commands will be
+executed on the nodes in the order given.
+
+.TP
+\-h
+Print help information and exit.
+.TP
+\-v
+Print version information and exit.
+.TP
+\-a
+Execute \fIcommand\fR on all nodes which are up.  This is
+equivalent to saying \fBbpsh\fR allup \fIcommand\fR ... .
+.TP
+\-A
+Execute \fIcommand\fR on all nodes which are not down.  This
+is equivalent to saying \fBbpsh\fR allnotdown \fIcommand\fR.
+.TP
+\-n
+Redirect standard in from /dev/null.
+.TP
+\-N
+Provide no IO forwarding at all.  If only one remote process
+is starting, this will cause \fBbpsh\fR to do a \fBbproc_execmove\fR
+without forking.
+.TP
+\-L
+Line buffer output from remote processes.
+.TP
+\-p
+Prefix each line of output from remote processes with the
+node number.  This option implies \-L.
+.TP
+\-s
+Show the output from each remote process sequentially.
+.TP
+\-d
+Print a divider with the node number between the output from
+each remote process.  This option implies \-s.
+.TP
+\-b \fIbufferbytes\fR
+Set IO buffer size to \fIbufferbytes\fR.
+This affects the maximum line length for line buffered
+IO. (default=4096)
+.TP
+\-I \fIfilename\fR
+Redirect standard in from \fIfilename\fR.
+This redirection will take place on the remote node.
+.TP
+\-O \fIfilename\fR
+Redirect standard out to \fIfilename\fR.
+This redirection will take place on the remote node.
+.TP
+\-E \fIfilename\fR
+Redirect standard error to \fIfilename\fR.
+This redirection will take place on the remote node.
+
+.PP
+The binary that \fBbpsh\fR is to execute remotely is taken from the
+front end and executed remotely via the \fBbproc_execmove\fR function.
+The implications of this are that while the binary does not have to be
+available on the remote machine, any libraries that it will try to
+dynamically link against do have to exist on the remote node.  The
+dynamic linker will notify you of missing libraries in the usual way.
+
+.SH BUGS
+.PP
+\fBbpsh\fR currently does not print any error message if the
+exec part of \fBbproc_execmove\fR succeeds but the
+\fBbproc_move\fR part fails.  Exit status is set correctly.
+
+.SH SEE ALSO
+.PP
+\fBbpcp\fR(1),
+\fBbpstat\fR(1)
+
+

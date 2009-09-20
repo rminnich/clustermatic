@@ -1,0 +1,109 @@
+.TH BEOBOOT 8 "" "Beoboot cm1.10" "Beoboot Administrator's Manual"
+.SH NAME
+beoboot \- Boot image creation program
+.SH DESCRIPTION
+.PP
+\fBbeoboot\fR is a program which creates boot images used to boot the
+slave nodes in a BProc cluster.  The boot image consists of a kernel
+and initial ramdisk (initrd) image.
+
+Beoboot will create two types of boot images \- a phase 1 image or a
+phase 2 image.
+
+A phase 1 image will attempt to download phase 2 image from the
+beoboot boot server.  A phase 1 image will start the phase 2 image
+using Two Kernel Monte.  On architectures which Two Kernel Monte
+doesn't support only phase 2 images can be created.
+
+A phase 2 image will load the bproc modules and start up the BProc
+slave daemon.
+
+.SH USAGE
+.TP
+\-h
+Display a usage essage and exit.
+.TP
+\-V, \-\-version
+Display version information and exit.
+.TP
+\-v
+Enable verbose mode for debugging.
+
+.TP
+\-1
+Create a phase 1 image.
+.TP
+\-2
+Create a phase 2 image.
+.TP
+\-o \fIfile\fR
+Write the image to \fIfile\fR.
+
+.PP
+Image output types.
+.TP
+\-n
+Create a netboot image suitable for download by a phase 1 image.
+.TP
+\-i
+Create separate kernel and initrd files.  These files can be given to
+any boot loader.  The \-o option must be used to specify an output
+file.  If \fIfile\fR is the argument to -o, the kernel and initrd will
+be placed in \fIfile\fR.kernel and \fIfile\fR.initrd respectively.
+
+NOTE: This output format does not include the kernel command line so
+the (\-c) option will have no effect.  You must supply the command
+line to your boot loader manually.
+.TP
+\-e
+Create a bootable CD image using El Torito.  (x86, AMD64 Only)
+.TP
+\-f
+Create a bootable 1.44MB floppy disk image. (x86 Only)
+.TP
+\-a
+Create a bootable CD using ABOOT.  (Alpha only)
+
+.TP
+\-c \fIcommandline ...\fR, \-\-cmdline \fIcommandline ...\fR
+Specify a kernel command line.  \fIcommand line\fR will be appended to
+the command line provided by beoboot.  Note that the separate image
+output format (\-i) does not include command line configuration.
+.TP
+\-\-kversion \fIversion\fR
+Override the automatically determined kernel version.  Normally
+beoboot will look at the kernel image it's about to use to determine
+the kernel version.
+.TP
+\-\-usb
+Include USB networking support.
+.TP
+\-\-noautomod
+Do not automatically generate a list of modules to include on the boot
+image.  If you use this option, you must manually specify which
+network drivers to include in \fBconfig.boot\fR. (See
+beoboot_config(5))
+.TP
+\-k \fIkernel\fR, \-\-kernel \fIkernel\fR
+Specify which kernel image to use.  By default beoboot will try to
+find the current running kernel in /boot/vmlinuz-\fIkernelrev\fR.  A
+specific default kernel can also be specified in the beoboot
+configuration file.  (See beoboot_config(5))
+.TP
+\-m \fIdir\fR, \-\-modules \fIdir\fR
+Specify where to find modules for the boot image kernel.  By default
+beoboot will look at the version of the kernel being used and look for
+modules in /lib/modules/\fIversion\fR.
+.TP
+\-\-plugin \fIname\fR
+This flag adds a 3rd party plugin to the boot image.
+
+.SH BUGS
+.PP
+beoboot is a big nasty shell script with gross argument parsing so you
+can't combine single letter flags the way you usually can.
+
+.SH SEE ALSO
+\fBbeoboot_config\fR(5),
+\fBbeoserv\fR(8),
+\fBbproc\fR(1)

@@ -1,0 +1,105 @@
+.\" $Id: bpfs.5,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPFS 5 "" "BProc 4.0.0pre8" "BProc Administrator's Manual"
+.SH NAME
+bpfs \- BProc file system
+
+.SH DESCRIPTION
+.PP
+\fBbpfs\fR is the BProc pseudo files system.  It presents machine
+state information to other user space applications.  It is usually
+mounted on \fB/bpfs\fR.
+
+The \fBbpfs\fR file system has an entry for every node configured in
+the system.  Node ownership and permissions can be changed using the
+usual UNIX system calls for manipulating node permissions.
+
+.SH NODE PERMISSIONS
+.PP
+Node permissions are represented as UNIX file permissions.  Nodes have
+an owner and a group ID and a set of permission bits which determine
+what each type of user is allowed to do.
+
+A user may change the group ID and permission bits on nodes he owns.
+
+The only permission bit currently defined is the execute (x) bit.
+Attempting to set any of the other bits will result in an error.  If a
+user has execute permission on a node, the user is permitted to
+migrate a process to that node.
+
+Anything already running on the node will not be affected if
+permissions are changed.  Likewise, anything that is already running
+on a node wil be able for fork new processes even if execute
+permission has been removed.
+
+If a node is \fIdown\fR, nobody (including root) can change the owner,
+group or permissions of a node.
+
+.SH NODE ATTRIBUTES
+.PP
+Arbitrarty node addtributes can be stored for nodes as extended
+attributes.  These attributes can be queried and modified using the
+\fBlistxattr\fR(2), \fBgetxattr\fR(2) and \fBsetxattr\fR(2) system
+calls.  \fBbproc_getnodeattr\fR(2) and \fBbproc_setnodeattr\fR are
+convenient wrappers around these calls.
+
+Arbitrary extended attributes may be added by other system software
+(e.g. beoboot).  All additional attribute names must begin with
+"bproc.".  Only root may add or change attributes regardless of who
+owns the node.  If a node goes \fIdown\fR all extended attribute
+information is discarded.
+
+BProc defines the following extended attributes:
+.TP
+\fBBPROC_STATE_XATTR\fR (\fIbproc.state\fR)
+Node state (e.g \fIup\fR or \fIdown\fR).  Node state is a null
+terminated character string.
+.TP
+\fBBPROC_ADDR_XATTR\fR (\fIbproc.addr\fR)
+Node address.  The node address is stored as a (machine dependent)
+\fBstruct sockaddr\fR.
+
+.PP
+Beoboot sets the following extended attributes:
+.TP
+\fBbproc.cpus\fR
+Binary integer.  The number of CPUs on the node.
+.TP
+\fBbproc.hz\fR
+Binary integer.  The CPU frequency of the node.
+.TP
+\fBbproc.mem\fR
+Binary integer.  The total amount of memory on the node.
+
+.SH THE STATUS FILE
+.PP
+The master node will have an entry named \fBstatus\fR.  This file
+contains contains the status of every node in the system packed
+together for easy reading.
+
+The file is a series of \fBstruct bproc_node_info_t\fR structures.
+The size of the status file will be a multiple of that structure size.
+The layout of the status structure is as follows:
+.nf
+struct bproc_node_info_t {
+    int node;
+    char status[BPROC_STATE_LEN+1];
+    unsigned int mode;
+    unsigned int user;
+    unsigned int group;
+    struct sockaddr addr;
+};
+.fi
+
+The status file also serves as the system change notification
+mechanism.  The status file will show ready for reading after any
+machine state change (e.g. node changes states state, node permissions
+change, etc.).  The ready for reading status may be cleared by reading
+from the status file.
+
+.SH SEE ALSO
+.PP
+\fBbproc_getnodeattr\fR(2),
+\fBbproc_setnodeattr\fR(2),
+\fBbproc_chown\fR(2),
+\fBbproc_chgrp\fR(2),
+\fBbproc_mod\fR(2)

@@ -1,0 +1,61 @@
+.\" $Id: bproc_nodespec.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODESPEC 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodespec \- translate a node specification to a list of node numbers
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodespec\fR(int ** \fIlist\fR, int * \fIlistsize\fR,
+const char * \fIstr\fR);
+
+int \fBbproc_nodespec_\fR(int ** \fIlist\fR, int * \fIlistsize\fR,
+const char * \fIstr\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_nodespec\fR takes a node specification string (\fIstr\fR)
+and returns the list of node numbers that it corresponds to.  The
+\fIlist\fR argument points to an integer pointer which will be
+modified to point to the list.  The list size will be stored in the
+integer pointed to by \fIlistsize\fR.
+
+Memory to hold the node list is allocated with \fBmalloc\fR(3)
+and it is up to the calling application to free this memory.
+\fBbproc_nodespec\fR will always start a new list and does not require
+special initialization of the \fIlistsize\fR and \fIlist\fR arguments.
+
+\fBbproc_nodespec_\fR will append node numbers to the end of the list
+pointed to by the \fIlist\fR argument.  \fBbproc_nodespec_\fR
+requires the arguments pointed to by \fIlistsize\fR and \fIlist\fR
+to be initialized.  For an empty list, both may be initialized to
+zero.  The memory pointed to by \fIlist\fR must be allocated with
+\fBmalloc\fR(3) so that it can be reallocated to allow the list
+to grow.
+
+The node specification string is a comma delimited list of node
+numbers, ranges or node states.  For example:
+.TP
+numbers
+e.g. 5,11,10
+.TP
+node ranges (inclusive)
+e.g.  5\-10 means 5,6,7,8,9,10.
+.TP
+node states prefixed with "all" or "allnot"
+e.g.  "allup" means
+all nodes which are up and "allnotup" means all nodes which are not
+up.
+
+.PP
+\fBbproc_nodespec\fR will modify \fIlist\fR and \fIlistsize\fR.
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_nodespec\fR will return 0.  On error, it will
+return \-1.
+
+.SH SEE ALSO
+.PP
+\fBbproc_nodeinfo\fR(2), \fBbproc_nodelist\fR(2)
+

@@ -1,0 +1,36 @@
+.\" $Id: bproc_execmove.2,v 1.3 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_EXECMOVE 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_execmove \- move a newly execed process to another node
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_execmove\fR(int \fInode\fR, const char * \fIcmd\fR, 
+  char * const \fIargv\fR[], char * const \fIenvp\fR[]);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_execmove\fR is a combination of the \fBexecve\fR
+and \fBbproc_move\fR syscalls.  First the \fBexecve\fR is
+performed with the \fIcmd\fR, \fIargv\fR and
+\fIenvp\fR arguments.  Then, before returning to user space, a
+\fBbproc_move\fR is performed to move the new process to
+\fInode\fR.
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_execmove\fR does not return.  If an error
+occurs during the \fBexecve\fR step, \fBbproc_execmove\fR
+will return \-1 and \fBerrno\fR will be set appropriately.  If an
+error occurs after a successful \fBexecve\fR, the process will
+exit with the value of errno returned in the exit status.
+
+.SH ERRORS
+.PP
+\fBbproc_execmove\fR can return any of the errors for
+\fBexecve\fR or \fBbproc_move\fR.
+
+.SH SEE ALSO
+.PP
+\fBexecve\fR(2),
+\fBbproc_move\fR(2)

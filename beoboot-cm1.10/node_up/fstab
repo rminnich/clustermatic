@@ -1,0 +1,22 @@
+# /etc/clustermatic/fstab - This file is the fstab for nodes.
+#
+# Variables that will get substituted:
+#  MASTER = IP address of the master node.  (good for doing NFS mounts)
+#
+# Note that the "noauto" and "user" options are meaningless here.
+#
+# The root file system is a tmpfs provided by the boot scripts.  You
+# can mount something on / if you'd like but due to oddities in the file
+# caching code it's not recommended right now.
+
+# You can mount swap space like this....
+#/dev/hda2	swap		swap	defaults	0 0
+
+# /proc will be mounted by the boot-up stuff but you will want to add it
+# here if you decide to run with a chrooted environment.
+none		/proc		proc	defaults	0 0
+none		/sys		sysfs	defaults	0 0
+none		/bpfs		bpfs	defaults	0 0
+
+# NFS (for example)
+#MASTER:/home	/home		nfs	nolock	0 0

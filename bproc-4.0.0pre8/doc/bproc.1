@@ -1,0 +1,140 @@
+.\" $Id: bproc.1,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC 1 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+
+.SH NAME
+bproc \- Beowulf Distributed Process Space
+
+.SH DESCRIPTION
+.PP
+
+The Beowulf Distributed Process Space (BProc) is a set of Linux kernel
+modifications which provides a single system image and process
+migration facilities for processes running in a Beowulf style cluster.
+With BProc, all the processes running in a cluster are visible on the
+cluster front end machine and are controllable via existing UNIX
+process control mechanisms.  Process creation is done on the front end
+machine and the processes are placed on the nodes where they will run
+with BProc's process migration mechanism.
+
+This manual page is an index of other BProc documentation.
+
+.\" We should have a section of concepts here as well for migration, etc.
+
+.SH PROGRAMS
+.PP
+
+.TP
+bpsh
+run a command on a remote node
+.TP
+bpcp
+copy a file to or from a remote node
+.TP
+bpstat
+get system information
+.TP
+bpctl
+control or configure nodes
+.TP
+bplib
+view or edit BProc's library list
+.PP
+
+.SH DAEMONS
+.PP
+.TP
+bpmaster
+The BProc master daemon.  This allows one machine to export a piece of
+its process space to another running the BProc slave daemon.
+.TP
+bproc_config
+Configuration reference for bpmaster.
+.TP
+bpslave
+The BProc slave daemon.  This allows a machine to accept processes
+from another machine.
+
+.SH C LIBRARY INTERFACE
+.PP
+.TP
+bproc_access
+determine whether a node can be accessed
+.TP
+bproc_chgrp
+change node group ownership
+.TP
+bproc_chmod
+change the permissions on a node
+.TP
+bproc_chown 
+change node ownership
+.TP
+bproc_currnode 
+return the node the calling process is running on
+.TP
+bproc_execmove
+move a newly execed process to another node
+.TP
+bproc_masteraddr
+return the address of the master node
+.TP
+bproc_move
+move the calling process to another node
+.TP
+bproc_nodeaddr 
+return the address of a node
+.TP
+bproc_nodecachepurgefail
+flush file cache failure list
+.TP
+bproc_nodecachepurgeok
+flush successful downloads from file cache
+.TP
+bproc_nodechroot
+ask a slave daemon to perform a chroot
+.TP
+bproc_nodehalt
+ask a slave daemon to halt the machine
+.TP
+bproc_nodeinfo
+get status information for single node
+.TP
+bproc_nodelist
+get status information for all the nodes
+.TP
+bproc_nodenumber 
+get the node number corresponding to an address
+.TP
+bproc_nodepwroff
+ask a slave daemon to power off the machine
+.TP
+bproc_nodereboot 
+ask a slave daemon to reboot the machine
+.TP
+bproc_nodesetstatus
+set status of a node
+.TP
+bproc_nodestatus
+get the status of a node
+.TP
+bproc_notifier
+get BProc notifier file descriptor
+.TP
+bproc_numnodes
+get the number of nodes in the system
+.TP
+bproc_pidnode
+return the node that a process exists on
+.TP
+bproc_proclist
+get process information for single node
+.TP
+bproc_requestfile
+request a file through the BProc file cache interface
+.TP
+bproc_rfork
+fork a child onto a remote node
+.TP
+bproc_version
+get BProc version information
+.PP

@@ -1,0 +1,27 @@
+.\" $Id: bproc_nodenumber.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODENUMBER 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodenumber  \- get the node number corresponding to an address
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodenumber\fR(struct sockaddr * \fIaddr\fR,int \fIsize\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_nodenumber\fR returns the number of the node with the
+address given in \fIaddr\fR.  \fIsize\fR is the size of
+address structure pointed to by \fIaddr\fR.
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_nodenumber\fR will return a node
+number or \fBBPROC_NODE_MASTER\fR.  On error, it will return
+\fBBPROC_NODE_NONE\fR.
+
+.SH SEE ALSO
+.PP
+\fBbproc_masteraddr\fR(2),
+\fBbproc_nodeaddr\fR(2)
+

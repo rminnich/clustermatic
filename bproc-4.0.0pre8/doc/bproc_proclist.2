@@ -1,0 +1,42 @@
+.\" $Id: bproc_proclist.2,v 1.2 2004/09/14 20:05:34 mkdist Exp $
+.TH BPROC_PROCLIST 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_proclist \- get process information for single node
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_proclist\fR(int \fInode\fR, struct bproc_proc_info_t ** \fIlist\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_proclist\fR returns a list of \fBstruct bproc_proc_info_t\fR
+structures \- one for remote process being managed
+by the BProc master daemon.  A pointer to this list is stored in the
+pointer pointed to by the \fIlist\fR parameter.  The return
+value is the number of elements in the list.  The memory for the list
+is allocated using \fBmalloc\fR and it is up to the caller to
+free this memory.
+
+.nf
+struct bproc_proc_info_t {
+    int pid;
+    int node;
+};
+.fi
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_proclist\fR will return the number of
+elements in the list.  On error, it will return \-1 and errno
+will be set appropriately.
+
+.SH ERRORS
+.PP
+.TP
+\fBEBUSY\fR
+The BProc system is not running.
+
+.SH SEE ALSO
+.PP
+\fBbproc_pidnode\fR(2)

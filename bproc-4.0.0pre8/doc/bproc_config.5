@@ -1,0 +1,101 @@
+.\" $Id: bproc_config.5,v 1.3 2004/10/01 19:44:48 mkdist Exp $
+.TH BPROC_CONFIG 5 "" "BProc 4.0.0pre8" "BProc Administrator's Manual"
+.SH NAME
+config \- the BProc master configuration file
+
+.SH SYNOPSIS
+/etc/clustermatic/config
+
+.SH DESCRIPTION
+The BProc master daemon and beoserv read their configuration
+information from /etc/clustermatic/config.  This file is a plain
+text file.  All configuration directives are a single line take the
+form of:
+
+\fBtag\fR \fIarguments ...\fR
+
+Comments are shell script style, beginning with # and extending to the
+end of the line.  Since several programs and scripts use this
+configuration file, the BProc master daemon will only pay attention to
+tags it recognizes and ignore all others.
+
+.SH CONFIGURATION
+.PP
+The first item on a configuration line is the \fBtag\fR.  The tag is
+case sensitive.  Arguments follow the tag.  Optional argments are
+indicated by square brackets.  Do not include the brackets in the
+configuration file.
+.TP
+\fBbprocport\fR \fIportnumber\fR
+The \fBbprocport\fR command tells the BProc master daemon which TCP
+port it should listen on for connections from slave machines.  Only
+one \fBbprocport\fR command is allowed.  The master daemon will
+listen on this port on all interfaces.  The default value is \fB2223\fR.
+.TP
+\fBinterface\fR \fIinterfacename\fR
+The \fBinterface\fR command tells the BProc master daemon and the
+beoserv daemon to listen for connections on a particular interface.
+If multiple interface lines appear in the file, the daemons will
+listen on multiple interfaces.
+.TP
+\fBip\fR [\fInodenumber\fR] \fIIPaddress ...\fR
+The \fBip\fR assigns one or more IP addresses to a single node.  If
+the \fInodenumber\fR argument is given, the IP address will be
+assigned to that node.  If it is omitted, it will be assigned to the
+node following whatever node was assigned last.  If no nodes have been
+assigned, assignment will start with node zero.  IP addresses must be
+in dotted notation. (ie. 10.0.0.1) No hostnames are allowed.
+.TP
+\fBiprange\fR [\fInodenumber\fR] \fIIPaddress1\fR \fIIPaddress2\fR
+The \fBiprange\fR assigns addresses \fIIPaddress1\fR up to and
+including \fIIPaddress2\fR to nodes.  If the \fInodenumber\fR argument
+is given, the first address will be assigned to that node, the next
+address to the next node and so on.  If the \fInodenumber\fR argument
+is omitted, the addresses will be assigned starting with the node
+following whatever node was assigned last.  If no nodes have been
+assigned, assignment will start with node zero.
+.TP
+\fBlogfacility\fR \fIfacility\fR
+The \fBlogfacility\fR command specificies which log facility the BProc
+master daemon should use.  Some valid log facility names are
+\fBdaemon\fR, \fBsyslog\fR and \fBlocal0\fR.  See the syslog
+documentation for the complete set.  By default \fBdaemon\fR will be
+used.
+.TP
+\fBmaster\fR \fIhostname\fB[:\fIport\fB]\fR \fI...\fR
+The \fBmaster\fR command lists the addresses for master nodes in the
+system.  These lists of addresses will be sent to slave nodes so that
+they will find all the master nodes in the system.  There should be
+exactly one \fBmaster\fR line for every master node in the system.
+Each \fBmaster\fR can have more than one address.  Slave nodes will
+attempt to connect to each address on the list in order.  It is
+acceptable for a master node to have a line for itself.  This should
+be a no-op since the slave should see that it is already connected to
+that master.
+.TP
+\fBpingtimeout\fR \fIseconds\fR
+The \fBpingtimeout\fR command controls how frequently the BProc
+master and slave daemons will ping one another to make sure they're
+still alive.  This value is propaged to the slave machines when they
+connect to the master.  The default value is 30 seconds.
+.TP
+\fBslave\fR \fBtimesync\fR \fIyes\fR|\fIno\fR
+If \fBslave\fR \fBtimesync\fR is set to \fByes\fR then the master
+daemon will include time stamps in the BProc ping messages.  The slave
+daemons will use these time stamps to keep the slave daemon reasonably
+synchronized with the master node.  The default value is \fByes\fR.
+.TP
+\fBslave\fR \fBprivatefs\fR \fIyes\fR|\fIno\fR
+If the \fBslave\fR \fBprivatefs\fR flag is set to \fByes\fR.  Then the
+slave daemon will create a private file system namespace for itself.
+The root file system will be a \fItmpfs\fR file system.  It and
+everything under it will be automatically unmounted when the slave is
+disconnected from the master.  The default value is \fBno\fR.
+
+.SH BUGS
+.PP
+Since the master daemon ignores tags that it doesn't do anything with,
+it may ignore tags which are misspelled, invalid, etc.
+
+.SH SEE ALSO
+\fBbpmaster\fR(8)

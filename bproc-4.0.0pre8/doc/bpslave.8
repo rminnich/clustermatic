@@ -1,0 +1,65 @@
+.\" $Id: bpslave.8,v 1.3 2004/09/23 20:11:11 mkdist Exp $
+.TH BPSLAVE 8 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bpslave \- the BProc slave daemon
+
+.SH SYNOPSIS
+\fBbpslave\fR \-h
+
+\fBbpslave\fR \-V
+
+\fBbpslave\fR [ options ] \fImaster_address\fR \fImaster_port\fR
+
+.SH DESCRIPTION
+.PP
+\fBbpslave\fR is the BProc slave daemon.  The slave daemon
+connects to a BProc master daemon and receives processes from the
+master.
+
+The BProc slave daemon is also available as a library named
+libbpslave.a.  This is provided as a convenience for boot
+systems which like to create busy\-box type binaries.
+
+Multiple slave daemons may be run on a single machine.
+.TP
+\-h
+Print help information and exit.
+.TP
+\-V
+Print version information and exit.
+.TP
+\-v
+Increase verbose level.  This option may be specified
+more than once for increased verbosity.
+.TP
+\-d
+Do not become a daemon.  This will prevent bpslave from
+detaching from its controlling tty and forking into the background.
+.TP
+\-e
+Log to standard error.  Note that \-d and \-v together imply \-e.
+.TP
+\-l \fIlogfacility\fR
+Log messages using \fIlogfacility\fR.  The default is \fBdaemon\fR.
+.TP
+\-i
+Ignore BProc interface version mismatch.  This will cause the
+slave daemon to ignore BProc version mistmatches between itself and
+the loaded kernel modules and betweeen itself and the master.  (This
+is dangerous.)
+.TP
+\-r
+Enable auto-reconnect.  This will cause the slave daemon to
+automatically retry a master if the connection to that master is lost.
+.TP
+\-s \fIaddress\fR
+When connecting to the master daemon bind to \fIaddress\fR locally.
+.TP
+\-m \fIfile\fR
+Dump a message trace to \fIfile\fR.  This is
+only good for debugging BProc and it will slow the slave daemon
+down.
+
+.SH SEE ALSO
+.PP
+\fBbpmaster\fR(8)

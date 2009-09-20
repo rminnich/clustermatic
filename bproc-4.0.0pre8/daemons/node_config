@@ -1,0 +1,133 @@
+# Sample BProc / Clustermatic Configuration file
+#
+#
+# The configuration directives in this file are described in
+# bproc_config(5) and beoboot_config(5).
+#
+# $Id: node_config,v 1.21 2004/10/26 18:45:27 mkdist Exp $
+
+# interface interfacename
+# The interface command tells the BProc master daemon and the beoserv
+# daemon to listen for connections on a particular interface.  If
+# multiple interface lines appear in the file, the daemons will listen
+# on multiple interfaces.
+#
+interface eth1
+
+# bprocport nodenumber
+# The bprocport command tells the BProc master daemon which TCP port
+# it should listen on for connections from slave machines.  Only one
+# bprocport command is allowed.  The master daemon will listen on this
+# port on all interfaces.  The default value is 2223
+#
+# bprocport 2223
+
+# master hostname[:port] ...
+# The master command lists the addresses for master nodes in the
+# system.  These lists of addresses will be sent to slave nodes so
+# that they will find all the master nodes in the system.  There
+# should be exactly one master line for every master node in the
+# system.  Each master can have more than one address.  Slave nodes
+# will attempt to connect to each address on the list in order.  It is
+# accept­ able for a master node to have a line for itself.  This
+# should be a no-op since the slave should see that it is already
+# connected to that master.
+#
+# master master1
+# master master2
+
+# pingtimeout seconds
+# The pingtimeout command controls how frequently the BProc master and
+# slave daemons will ping one another to make sure they're still
+# alive.  This value is propaged to the slave machines when they
+# connect to the master.
+#
+# pingtimeout 30
+
+# ip [nodenumber] IPaddress1 ...
+# The ip assigns one or more IP addresses to a single node.  If the
+# nodenumber argument is given, the IP address will be assigned to
+# that node.  If it is omitted, it will be assigned to the node
+# following whatever node was assigned last.  If no nodes have been
+# assigned, assignment will start with node zero.  IP addresses must
+# be in dotted notation.  (ie. 10.0.0.1) No hostnames are allowed.
+#
+# ip 0 10.1.1.1
+# ip 10.1.1.1
+
+# iprange [nodenumber] IPaddress1 IPaddress2
+# The iprange assigns addresses IPaddress1 up to and including
+# IPaddress2 to nodes.  If the nodenumber argument is given, the first
+# address will be assigned to that node, the next address to the next
+# node and so on.  If the nodenumber argument is omitted, the
+# addresses will be assigned starting with the node following whatever
+# node was assigned last.  If no nodes have been assigned, assignment
+# will start with node zero.
+#
+iprange 0 10.0.0.10 10.0.0.17   # Nodes 0-8 have addresses from this range.
+
+# slave timesync yes|no
+# If slave timesync is set to yes then the master daemon will include
+# time stamps in the BProc ping messages.  The slave daemons will use
+# these time stamps to keep the slave daemon reasonably synchro­ nized
+# with the master node.  The default value is yes.
+#
+# slave timesync yes
+
+# slave privatefs yes|no
+# If the slave privatefs flag is set to yes.  Then the slave daemon
+# will create a private file system namespace for itself.  The root
+# file system will be a tmpfs file system.  It and everything under it
+# will be automatically unmounted when the slave is disconnected from
+# the master.  The default value is no.
+#
+# slave privatefs no
+
+# The slave node boot file.
+#
+#
+bootfile /var/clustermatic/boot.img
+
+# Library list
+#
+# This tells beoboot which libraries to put on the node at boot time.
+#
+# The "librariesfrombinary" lines instruct beoboot to inspect a binary
+# and generate a a library list from that.
+#
+# The "libraries" lines explicitly include libraries.  Note that you
+# must add the real file to the list - NOT the symlink to the real
+# file.  Globbing is allowed here.
+#
+# For both directives: Any file which doesn't exist will be silently
+# ignored.  Each may be used more than once to add to the list.
+
+# Example:
+librariesfrombinary /bin/sleep /bin/ps /bin/ping /bin/ls # get libc,resolver
+libraries /usr/lib/libstdc++*   /usr/lib64/libstdc++*    # C++ support
+libraries /usr/lib/libbproc.so* /usr/lib64/libbproc.so*  # BProc, of course.
+libraries /lib/libnss_bproc*    /lib64/libnss_bproc*     # BProc resolver
+
+# Other possible binaries to run a node.
+# librariesfrombinary /sbin/mke2fs
+
+
+# Here we assign MAC addresses to nodes.  Nodes can have multiple MAC
+# addresses.  Here the optional "0" zero argument states that the address
+# should be assigned to node zero.  Node lines following that will assign
+# addresses to nodes sequentially
+#
+# The following are some examples:
+#
+#node 0 00:50:56:00:00:00
+#node   00:50:56:00:00:01
+#node   00:50:56:00:00:02
+#node   00:50:56:00:00:03
+#node   00:60:b0:a2:19:1a
+#node   00:d0:09:63:42:57
+#
+#node 0 00:60:b0:a2:19:1a
+#node   00:d0:09:63:42:57
+#node   00:00:86:45:CD:14
+#
+#node   00:e0:81:3:47:55

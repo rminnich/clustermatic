@@ -1,0 +1,20 @@
+.\" $Id: bproc_currnode.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_CURRNODE 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_currnode  \- return the node number the calling process is running on
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+int \fBbproc_currnode\fR(void);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_currnode\fR returns the node number that the
+current process is running on.  If the current process is running on
+the master node, it will return \fBBPROC_NODE_MASTER\fR (\-1).
+
+.SH SEE ALSO
+.PP
+\fBbproc_numnodes\fR(2),
+\fBbproc_nodeinfo\fR(2)
+

@@ -1,0 +1,69 @@
+.\" $Id: bpmaster.8,v 1.4 2004/09/23 20:11:10 mkdist Exp $
+.TH BPMASTER 8 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bpmaster  \- the BProc master daemon
+
+.SH SYNOPSIS
+.PP
+\fBbpmaster\fR \-h
+
+\fBbpmaster\fR \-V
+
+\fBbpmaster\fR [\-dvi] [\-c \fIfile\fR] [\-m \fIfile\fR]
+
+.SH DESCRIPTION
+.PP
+\fBbpmaster\fR is the BProc master daemon.  It runs on the front end
+machine of a cluster running BProc.  It listens on a TCP port and
+accepts connections from slave daemons.  Configuration information
+comes from the BProc configuration file.  See \fBbproc_config\fR(5)
+for more information about the BProc configuration file.
+
+Only a single copy of bpmaster may be run on any machine.
+.TP
+\-h
+Print help information and exit.
+.TP
+\-V
+Print version information and exit.
+.TP
+\-d
+Do not become a daemon.  This will prevent bpmaster from
+detaching from its controlling tty and forking into the background.
+.TP
+\-v
+Increase verbose level.  This option is most useful for debugging.
+This option may be specified more than once for increased verbosity.
+.TP
+\-i
+Ignore BProc interface version mismatch.  This will cause the
+master daemon to ignore BProc version mistmatches between itself and
+the loaded kernel modules and betweeen itself and slaves.  (This is
+dangerous.)
+.TP
+\-c \fIfile\fR
+Read configuration information from \fIfile\fR instead of the default
+(/etc/clustermatic/config).
+.TP
+\-m \fIfile\fR
+Dump a message trace to \fIfile\fR.  This is only good for debugging
+BProc.  It will slow the master daemon down significantly and can
+quickly consume large amounts of disk space.  Trace files can be
+viewed with \fBbptrace\fR(8).
+
+.SH SIGNALS
+.PP
+\fBbpmaster\fR can be forced to re-read its configuration file without
+restarting the system by sending a SIGHUP to bpmaster.  This will also
+cause the configuration to be resent to the slave nodes connected to
+the system.
+
+Most configuration items including the number of nodes and IP ranges
+can be modified with a SIGHUP reconfiguration.  If a connected slave
+node does not exist in the new configuration it will be disconnected.
+
+.SH SEE ALSO
+.PP
+\fBbproc_config\fR(5),
+\fBbpslave\fR(8),
+\fBbptrace\fR(8)

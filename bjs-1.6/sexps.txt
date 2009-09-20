@@ -1,0 +1,43 @@
+S-Expressions used by BJS:
+
+Job submission:
+(job POOL SHELL CMD PWD UMASK
+     (ENV ENV ENV ...)
+     ((REQ1KEY REQ1VAL ...)
+      (REQ2KEY REQ2VAL ...)
+      ... )
+)
+
+Job submission responses:
+(ok ID)
+(error MSG)
+
+Job submission (interactive):
+(job POOL ((REQ1KEY REQ1VAL ...)
+           (REQ2KEY REQ2VAL ...)
+	    ... )
+)
+
+Job submission (interactive) responses:
+(ok ID)
+(nodes ID NODE ...)
+(error MSG)
+
+
+Scheduler status sexpr:
+
+(status (POOLNAME
+            (NODE .... )
+	    ((JOBID UID CMDLINE SUBTIME STARTTIME ((REQ1KEY REQ1VAL ... )
+	                                           (REQ1KEY REQ1VAL ... )
+                                                    ...))
+             ... ))
+	...)
+
+
+SOB Internal Job Storage:
+(POOLNAME SUBMIT_TIME UID GID SHELL CMDLINE DIR UMASK
+       (ENVIRON ...)
+       ((REQ1KEY REQ1VAL ... )
+        (REQ1KEY REQ1VAL ... )
+        ...))

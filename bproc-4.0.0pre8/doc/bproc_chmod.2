@@ -1,0 +1,41 @@
+.\" $Id: bproc_chmod.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_CHMOD 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_chmod \- change the permissions on a node
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_chmod\fR(int \fInode\fR, int \fImode\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_chmod\fR changes the permissions on \fInode\fR to \fImode\fR.
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_chmod\fR will return 0.  On error,
+\fBbproc_chmod\fR will return \-1 and errno will be set
+appropriately.  The calling user must be the node owner or the
+superuser in order to change the permissions.
+
+.SH ERRORS
+.TP
+\fBEPERM\fR
+The calling process isn't permitted to change the
+\fInode\fR's permissions.
+.TP
+\fBEINVAL\fR
+\fInode\fR is an invalid node number or
+\fInode\fR is down.
+.TP
+\fBEBUSY\fR
+The BProc system is not running.
+.PP
+
+.SH SEE ALSO
+.PP
+\fBbproc_access\fR(2),
+\fBbproc_chown\fR(2),
+\fBbproc_chgrp\fR(2),
+\fBbproc_nodeinfo\fR(2)

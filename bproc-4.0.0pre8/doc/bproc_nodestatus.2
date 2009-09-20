@@ -1,0 +1,47 @@
+.\" $Id: bproc_nodestatus.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODESTATUS 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodestatus \- get the status of a node
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodestatus\fR(int \fInode\fR, char *\fIstatus\fR, int \fIlen\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_nodestatus\fR will store the status of the \fInode\fR in the
+buffer pointed to by \fIstatus\fR.  \fIlen\fR is the size of the
+buffer pointed to by status.  If there is sufficient room in the
+buffer, the string will be null terminated.
+
+There is one reserved node status: \fBdown\fR.  A node which is
+down is disconnected from the BProc master.  Any other node state
+indicates that the node is connected.  By convention, a node that is
+ready to use is in the \fBup\fR state.
+
+The \fBbproc_nodestatus\fR function, like all machine status
+functions, is available only on the front end.
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_nodestatus\fR returns the number of bytes written
+into the buffer.  The result will be null terminated if there is
+enough room in the buffer.  On error, \-1 is returned and errno
+is set appropriately.
+
+.SH ERRORS
+.PP
+.TP
+\fBEINVAL\fR
+\fInode\fR is an invalid node number or
+\fInode\fR is down. 
+
+.TP
+\fBEBUSY\fR
+The BProc system is not running.
+
+.SH SEE ALSO
+.PP
+\fBbproc_rfork\fR(2),
+\fBbproc_execmove\fR(2)
+

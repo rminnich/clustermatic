@@ -1,0 +1,7 @@
+This is a revival of the LANL CM5 code, for the simple reason that we still
+can't find anything that works better. We're going to remove all bproc 
+dependencies because that kernel support will probably never happen, and 
+ps to 4400 nodes doesn't scale anyway. Process execution will still 
+copy the binary out, but will do a standard fork/exec. No migration, in other
+words. 
+

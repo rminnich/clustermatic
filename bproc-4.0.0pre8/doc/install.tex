@@ -1,0 +1,74 @@
+% $Id: install.tex,v 1.1 2002/02/19 06:45:55 mkdist Exp $
+\chapter{Installation Guide}
+
+This chapter describes how to get BProc built and installed on your
+system.  This process is fairly involved.  If you are new to BProc, it
+is recommended that you try a pre-built set of kernel, BProc and LANL
+beoboot packages from
+\texttt{http://www.clustermatic.org}.
+
+\subsection*{Build a Linux kernel with BProc support}
+First you will have to build a Linux kernel with the BProc kernel
+patch applied.  The kernel patch is provied with the BProc source
+distribution in the \texttt{patches} directory.  The patch file is
+named \texttt{bproc-patch-\emph{x.y.z}} where \emph{x.y.z} is the
+kernel revision the patch is built against.  The patch may apply
+cleanly against other revisions which are close to the one indicated.
+The kernel patches are built against stock Linux kernels.  They will
+most likely not apply cleanly to the kernels distributed by vendors
+such as Red Hat even if their kernel has the same revision number.
+
+The following example shows how you might apply the patch to your
+linux kernel tree:
+\begin{verbatim}
+cd /usr/src/linux
+patch -p1 < ~/bproc/patches/bproc-patch-2.4.17
+\end{verbatim}
+
+There may be other Linux patches in the patches directory with names
+like \texttt{linux-\emph{x.y.z}-\emph{something}.patch}.  These
+patches fix problems with Linux which affect BProc.  They are Linux
+bugfixes, not Linux modifications for BProc.  These should be applied
+in addition to the BProc kernel patch.
+
+When configuring your kernel turn on \textbf{Beowulf Distributed
+Process Space Support} under \textbf{General Setup}.  This will cause
+the hooks for BProc to be built into the kernel.  The BProc kernel
+code exists in kernel modules which will be built in the next step.
+
+Build the new kernel and modules and install it on your system.
+Modules built against another kernel will \textbf{not} work properly
+with the new BProc kernel.  Several key structures are modified for
+BProc and existing kernel modules will likely disfunction even if they
+are still loadable.
+
+Install the new kernel and reboot with it now.
+
+\subsection*{Build and Install BProc}
+Build the BProc source by typing \texttt{make} in the top level of the
+BProc source tree.  The make files default to building against the
+linux kernel tree in \texttt{/usr/src/linux}.  If your source tree is
+in another location, add \texttt{LINUX=} to the \texttt{make} command
+line.  For example:
+\begin{verbatim}
+make LINUX=/path/to/linux/source
+\end{verbatim}
+Next, do the install step as follows:
+\begin{verbatim}
+make LINUX=/path/to/linux/source install
+\end{verbatim}
+
+This will install all the user level programs, kernel modules,
+libraries, and documentation on the system.
+
+\subsection*{Configure BProc}
+
+
+\subsubsection*{Run it all}
+Install the kernel modules
+\begin{verbatim}
+modprobe bproc
+bpmaster
+\end{verbatim}
+
+

@@ -1,0 +1,38 @@
+@node Beowulf Name Service, BProc, Top
+@chapter Name Service with Beowulf 
+
+@c What is Name Service?
+Name Service is the generic name for mapping human-friendly names onto
+numeric system parameters.  Common UNIX examples include mapping 
+hostnames onto IP addresses or usernames onto numeric uids.
+
+@section Name Service on Beowulf
+
+@c Why does Beowulf have special name service?
+	The Beowulf system itself is special; it is novel and not
+	completely served by the existing systems.
+
+@c What new name spaces exist on a Beowulf system?
+	No new name spaces exist.
+
+@c What name service routines does Beowulf provide?
+	gethostbyname
+	gethostbyaddr
+	getpwuid
+	
+@c How do I combine Beowulf name services with traditional name services?
+	The modular name service system present in the GNU C library
+	(nss) provides for the stacking of name resolution services.
+	In this way, you can have Beowulf name lookups done either
+	before or after more traditional resolvers.
+	
+@c What general caveats are there with Beowulf name service routines?
+	There exists the potential for collisions. In particular,
+	the Beowulf system will resolve the hostnames "master" and "self".
+
+	On the node side, user-resolving routines only have enough
+	information to resolve for the UID under which the program
+	is running.
+
+
+

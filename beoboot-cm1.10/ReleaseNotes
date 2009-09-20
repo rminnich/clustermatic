@@ -1,0 +1,206 @@
+beoboot-cm 1.10 -------------------------------------------------------
+This version should be used with BProc version 4.0.0pre7+
+This version DOES NOT require cmtools.
+
+The "kmod" node_up module is back in a modified form.  It no longer
+requests modules from the front end after migrating to remote nodes.
+This is good because 100s of nodes won't bog down the front end
+requesting huge modules anymore.  The bad part is that stuff like the
+old pciprobe module doesn't work anymore.
+
+The note about sys_call_table for cm1.9 still applies with one change.
+From 4.0.0pre8 onwards the BProc doesn't export sys_call_table so the
+patch is always required.
+
+beoboot-cm 1.9 -------------------------------------------------------
+This version should be used with BProc version 4.0.0pre4+
+This version requires cmtools version 1.1+
+
+WARNING:  This is a barely tested release for Linux 2.6.5.
+
+This version has been ported to Linux 2.6.5.  This affected mostly the
+module gathering and loading code.
+
+Romfs has been dropped in favor Linux 2.6's initramfs stuff.  Doing
+that allowed us to get rid of genromfs and all the pivot_root()
+related code in the boot up program.  Unfortunately, Linux 2.6.5
+requires a small patch for the romfs file systems to be recognized.
+It's included as "initramfs-search-for-init.patch". Hopefully, that
+one will make it into future linux releases.
+
+The name of the two kernel monte patch has changed.  It is now called
+"linux-2.6.5-save_boot_params.patch" and can be found in the monte
+directory.  Monte still requires sys_call_table to be exported (this
+will be fixed at some point).  If the BProc patch isn't in the phase 1
+kernel, you will have to add two lines to of code somewhere to export
+it.  I added it to the end of kernel/sys.c like this:
+
+  extern void *sys_call_table[];
+  EXPORT_SYMBOL(sys_call_table);
+
+So far, this has been tested on x86 and AMD64 only.
+
+The 'kmod' plugin for node_up is broken in this release.
+
+For information on other changes see the ChangeLog.
+
+beoboot-cm 1.7 -------------------------------------------------------
+This version should be used with BProc version 4.0.0pre2+
+This version requires cmtools version 1.1+
+
+beoboot-cm 1.6 -------------------------------------------------------
+This version should be used with BProc version 4.0.0pre1+
+This version requires cmtools version 1.1+
+
+This is an update of beoboot for changes in BProc.  Note that linux
+2.4.22 contains a bug which prevents it from freeing the contents of
+the initrd.  The included "linux-2.4.22-unshare_files.patch" fixes
+this.
+
+For information on other changes see the ChangeLog.
+
+
+beoboot-cm 1.5 -------------------------------------------------------
+This version should be used with BProc version 3.2.0+
+This version requires cmtools version 1.1+
+
+The big change in this version of beoboot is that multicast boot image
+download scheme has been replaced with a (hopefully) more robust tree
+based unicast scheme.  The new scheme should hopefully work well on
+any switched network (e.g. myrinet, ethernet, infiniband).  It should
+be faster and less prone to problems, especially on large myrinet
+networks.
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+WARNING: Old phase 1 images will NOT be able to download a boot image
+from this new server.  Keep a copy of your old beoserv binary around.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+Kernels for phase 1 boot images now require tmpfs support to work.
+This change was made to give the boot program (and any plugins) a
+writable root file system to work with.  Note that clustermatic
+kernels (3 and earlier) do not include this support in their phase 1
+kernels.
+
+beoboot-cm 1.4 -------------------------------------------------------
+This version should be used with BProc version 3.2.0+
+This version requires cmtools version 1.1+
+
+The configuration and nodeinfo stuff has been removed and moved in to
+the "cmtools" package.  This package is now required to build beoboot.
+
+beoboot-lanl 1.3 -----------------------------------------------------
+This version should be used with BProc version 3.2.0+
+
+WARNING: There are lot of big changes in this version so expect a lot
+of rough edges.
+
+The nodeup scripts have been replaced with a program which will keep
+the number of processes and the amount of migration going on at boot
+time to a minimum.  There's a new configuration file
+/etc/beowulf/node_up.conf that controls the new node startup.  This
+new arrangement is somewhat less flexible but it's necessary to avoid
+severe load problems on the front end when many nodes are booted
+simultaneously.  Also, many copies of "node_up" are now started using
+bproc_vrfork() instead of individually migrating them off the front
+end.  This new setup is more limited but *MUCH* faster when booting
+large numbers of machines at once.  It may be slightly somewhat slower
+bringing up single nodes.
+
+The multicast stuff has been removed for library distribution at boot
+time.  That change was made because the success of multicast file
+transfer was overly network dependent and very flaky if anything was
+going even slightly wrong.  "node_up" now loads all the libraries on
+the library list into memory and takes them with it as it moves to the
+nodes.  This makes migration off the front end very expensive but this
+is mitigated by the use of vrfork for node setup.  THIS MEANS YOU WILL
+WANT TO TRIM YOUR LIBRARY LISTS SO THEY DO NOT INCLUDE EVERYTHING IN
+/lib AND /usr/lib.
+
+This restructuring of boot-up is motivated by our need to support
+different types of networks other than ethernet which may not support
+multicast or broadcast in hardware.  It also makes the behavior of the
+system much more predictable.
+
+$MASTER in /etc/beowulf/fstab should be changed to simply MASTER
+
+The file system creation and checking stuff hasn't been replaced at
+this point.
+
+Beoboot now requires the library versions of modutils to build as
+provided by the "modutils-devel" RPM from Red Hat 7.3.  Sorry for any
+inconvenience that causes.  We're trying to get away from maintaining
+a modutils RPM.
+
+Beoboot no longer requires a modified C library.  The dynamic linker
+patch was only for demand loading of libraries which we're trying to
+get away from.
+
+beoboot-lanl 1.2 -----------------------------------------------------
+This version should be used with BProc version 3.1.6+
+
+There are some monte MONTE_PROTECTED related cleanups which require
+that you patch the phase 1 beoboot kernel.  This is necessary because
+the kernel normally throws away the information from the real mode
+code after reading it.  It used to be possible to just find it at
+90000h but boot loaders have begun putting that information at other
+addresses.
+
+beoserv requires some calls only present in BProc 3.1.6+ now.
+
+The worst of the BProc dependencies have been removed.  The beoboot
+script now does the link with bpslave when you generate the boot
+images.  Beoboot does not require a rebuild every time BProc is
+updated although boot images will have to be recreated.
+
+Support for linking in the mon daemon (from supermon) has also been
+added.  A supermon supporting this should be released soon.
+
+beoboot-lanl 1.1 -----------------------------------------------------
+This version matches BProc version 3.1.2+
+
+The multicast file transfer protocol changed a little bit to preserve
+file permission and ownership.  This makes it incompatible with boot
+media based on lanl 1.0.
+
+Support for multiple boot images has been added via the configuration
+file.  For example:
+
+bootfile   /var/beowulf/boot.img  # this is the default boot image
+bootfile 5 /var/beowulf/boot2.img # Node 5 takes a different boot file.
+
+You can also supply comma separated node ranges like 5-10,100-120
+
+beoboot-lanl 1.0 -----------------------------------------------------
+This version matches BProc version 3.1.2
+
+This beoboot package is a derivative of the orignal beoboot package
+from Scyld Computing.  Here's a quick run-down of what's changed from
+Scyld beoboot 1.1.16.
+
+Differences & Improvements:
+
+ * Support for multicast file transfer w/ the BProc 3.1.x file request
+   mechanism.
+ * Support in daemons for new configuration language which allows multiple
+   IP addresses per node and multiple MAC addresses per node.
+ * Alpha support in Two Kernel Monte.
+ * Many small bugfixes in the "beoboot" script.
+ * Updated and cleaned up for Linux 2.4.x
+   - depmod, etc seem to keep changing, bug fixes here.
+   - tmpfs is used wherever possible during node boot.
+ * Version checking on RARP requests to avoid answering requests for
+   other architectures, etc.
+ * mkbootimg produces different images - multi-architecture capable
+   not and not nearly as bad an intel-only kludge.
+
+Known Issues / Problems:
+ * The RARP server no longer logs unknown MAC addresses it sees.
+ * Multiple boot images (based on node number or MAC) are not supported.
+ * Currently having a filesystem mounted on / in /etc/beowulf/fstab is
+   not recommended since it will hide files downloaded by the file
+   requester.
+ * The docs are (as always) out of date.
+
+- Erik Hendriks <hendriks@lanl.gov>, <erik@hendriks.cx>

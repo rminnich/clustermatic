@@ -1,0 +1,245 @@
+ -*- text -*-
+Erik Hendriks <erik@hendriks.cx>
+
+This is a list of messages and the relevant fields.
+
+BPROC_MOVE
+
+  This is the migration request message.
+
+  REQUEST:
+    to:                 node
+    from:               real PID
+    bpr_move_pgrp:      process process group ID
+    bpr_move_session:   process session ID
+    bpr_move_addr:      IP address to connect back to for process data
+    bpr_move_port:      Port number to connect back to for process data
+    bpr_move_ioport:    Port number to connect back to for IO forwarding
+  RESPONSE:
+    to:                 real PID
+    node:               node
+    result:             result of move operation
+
+BPROC_SEND
+
+  Send a process state w/o moving.  This is used by ghost exec.
+
+  All details are the same as for BPROC_MOVE.
+
+BPROC_FWD_SIG
+
+  This message is used to forward signals which have already been
+  received by a process.  When ghosts receive signals, they emit this
+  message to the real process.
+
+  TO BE IMPLEMENTED:
+
+  When a real process is blocking on a remote system call, this
+  message may be emitted and sent to the ghost process to interrupt
+  the remote system call.
+
+  NOTIFICATION:
+    from:               ghost PID
+    to:                 real PID
+    bpr_sig_info:       signal info details
+
+    from:               real PID
+    to:                 ghost PID
+    bpr_sig_info:       signal info details
+
+
+BPROC_GET_STATUS
+  REQUEST:
+    to:   destination PID
+    from: requesting PID
+    
+  RESPONSE:
+    to:   requesting PID
+    from: destination PID
+#define bpr_status_state   data.status.state
+#define bpr_status_options data.status.options
+#define bpr_status_utime   data.status.utime
+#define bpr_status_stime   data.status.stime
+#define bpr_status_cutime  data.status.cutime
+#define bpr_status_cstime  data.status.cstime
+#define bpr_status_minflt  data.status.minflt
+#define bpr_status_majflt  data.status.majflt
+#define bpr_status_nswap   data.status.nswap
+
+
+
+-------------------
+Remote System Calls
+-------------------
+
+Nonblocking syscalls are trivial to do remotely.  For those we're
+willing to hang out in the 'D' state for the time they take to
+complete remotely.
+
+Blocking syscalls are quite a bit more hairy.  The reason for this is
+that the calls must be interruptible both locally and remotely.  All
+signals for a blocking process that are delivered on the remote
+machine will be forwarded to the master node.  On the master node, the
+ghost will take on the signal handling characteristics of the remote
+process and perform the syscall.  That way, if a signal can be
+delivered to it
+
+
+
+All remote system calls are potentially blocking operations.  Ea
+
+** Some work will be needed somewhere to deal with the cases where
+   SIG_DFL means SIG_IGN.
+
+Every remote system call uses the following structure:
+	struct {
+	    unsigned long blocked[2];
+	    unsigned long arg[4];
+	} rsyscall;
+
+blocked - This is the set of blocked/ignored signals.  This needs to
+be applied by the ghost before performing the syscall.  This is
+necessary to have proper EINTR operation.
+
+arg - This is a generic pile of arguments for the syscall.  The
+syscalls we're emulating here don't take more than a few integers.
+
+
+
+
+BPROC_SYS_FORK:
+
+  When a real process running on a remote node performs a fork, the
+  child process needs to be assigned a PID from the front end machine.
+
+  REQUEST:
+    to:                  ghost PID
+    from:                real PID
+    bpr_rsyscall_arg[0]: clone flags
+
+  RESPONSE:
+    to:                 real PID
+    from:               ghost PID
+    result:             pid or error  (same semantics as fork())
+
+
+BPROC_SYS_KILL:
+
+  When a remote process tries to deliver a signal (with kill()) to a
+  process which is not present on that machine, this request is
+  generated to ask the ghost to perform the signal delivery on the
+  front end.
+
+  REQUEST:
+    to:                 ghost PID
+    from:               real PID
+    bpr_sig_pid:	Signal destination PID
+    bpr_sig_info:	Kernel siginfo structure for signal.
+
+  RESPONSE:
+    to:                 real PID
+    from:               ghost PID
+    result:             0 or error (same semantics as kill())
+
+
+BPROC_SYS_WAIT:
+
+  This request is used to have the ghost for a remote process perform
+  a wait4().
+
+  REQUEST:
+    to:                  ghost PID
+    from:                real PID
+    result:              pid argument to wait4()
+    bpr_rsyscall_arg[0]: pid argument to wait4()
+    bpr_rsyscall_arg[1]: options argument to wait4()
+
+  RESPONSE:
+    to:                 real PID
+    from:               ghost PID
+    result:             result of wait4(): pid or -error
+    bpr_status_status:  value of status after wait4()
+    bpr_status_utime:   values from rusage after wait4()
+    bpr_status_stime:   values from rusage after wait4()
+    bpr_status_minflt:  values from rusage after wait4()
+    bpr_status_majflt:  values from rusage after wait4()
+    bpr_status_nswap:   values from rusage after wait4()
+
+
+BPROC_EXEC
+
+  This is a notification to the front end that a process has performed
+  an exec().  For now, this just updates on the "comm" on the front
+  end to match the new program.
+
+    to:     ghost PID
+    from:   real PID
+    bpr_exec_comm: 16 byte string containing new comm string.
+
+
+BPROC_EXIT
+
+  When a real process exits, it sends this notification to the ghost
+  so that it can do the same.  This message also contains the final
+  status information for the process.
+
+    to:            ghost PID
+    from:          real PID
+    result:        exit status as passed to do_exit()
+    bpr_status_*:  final process status
+
+
+BPROC_STOP
+
+  When a task stops (i.e. enters TASK_STOPPED), this message gets sent
+  to the ghost so that it can take on the correct state and notify the
+  parent process.
+ 
+    to:     ghost PID
+    from:   real PID
+    result: ?? some stop signal or something..?
+    bpr_status_*: process status
+
+
+BPROC_CONT
+
+  When a task resumes running (leaves TASK_STOPPED), this message gets
+  sent so that the ghost can leave its quasi-stopped state.
+
+    to:       ghost PID
+    from:     real  PID
+
+
+BPROC_PTRACE
+
+  This is remote syscall for 
+
+    to:   real PID
+    from: real PID
+
+    bpr_ptrace_req: the ptrace request being made.
+    bpr_ptrace_pid: the PID to operate on
+
+
+BPROC_PTRACE_DETACH
+
+  This is a quiet detach message.  This is used to quietly clear the
+  TRACE bits on a process.  This is used by some of the cleanup code
+  in do_exit().
+
+    to:   real PID
+    from: real PID
+
+
+----------------------
+Miscellaneous Messages
+----------------------
+
+BPROC_PING
+
+  This is a keep-alive message sent back and forth between the bproc
+  daemons.  This message needs to be responded to before the next ping
+  is sent out or the daemons will presume that the network has died.
+
+  to:   node
+  from: node

@@ -1,0 +1,63 @@
+#!/bin/sh
+# node_down
+#
+# This script shuts down a node so that it can safely be turned off or
+# rebooted.  This just consists of remounting the file systems
+# read-only and syncing for now.
+#
+# $Id: node_down,v 1.2 2001/07/27 16:52:31 mkdist Exp $
+
+# Argument sanity checking
+if [ "$1" = "" ] ; then
+    echo "Usage: node_down <nodenumber> [<state>]"
+    exit 1
+fi
+
+NODE=$1
+STATE=$2
+PATH=/sbin:/usr/sbin:$PATH
+
+if [ -z "$STATE" ] ; then
+    STATE=reboot
+fi
+
+# Remove the available bit
+bpctl -S $NODE -s unavailable
+
+# Kill all proceses on this node ?
+
+bpsh $NODE cat /proc/mounts | \
+    while read device mountpt fstype junk ; do
+	# Skip the pseudo file systems
+	#if [ "$device" = none ] ; then continue ; fi
+	# Skip any romfs file systems
+	#if [ "$fstype" = romfs ] ; then continue ; fi
+
+	# Remove the "/rootfs" prefix if it happens to be there
+	mountpt=`echo $mountpt | sed -e 's!^/rootfs!!'`
+
+	if [ "$mountpt" = "" ] ; then mountpt="/" ; fi
+
+	# This will complain about not finding fstab. (that's ok)
+	echo "Remounting $mountpt readonly..."
+	bpsh -n $NODE mount -no remount,ro $mountpt 2>/dev/null
+    done
+
+echo Syncing disks.
+
+bpsh $NODE sync 
+bpsh $NODE sync
+bpsh $NODE sync
+
+# We probably don't really need this sleep to allow all the disk
+# buffers to flush since the machine won't reboot instantly when the
+# slave loses its connection to the front end.  It probably doesn't
+# hurt to be paranoid though.
+sleep 3
+
+echo "Shutting down node $NODE ($STATE)"
+
+# XXX We should have a mechanism for doing a halt as well.
+
+# Dump the node completely
+bpctl -S $NODE -s $STATE

@@ -1,0 +1,21 @@
+.\" $Id: bproc_vexecmove.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_VEXECMOVE 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+
+.SH NAME
+bproc_vexecmove \- Create more than one process using execmove.
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_vexecmove\fR(int \fInnodes\fR, int *\fInodes\fR, int \fIpids\fR,
+const char * \fIcmd\fR, char * const \fIargv\fR[], char * const \fIenvp\fR[]);
+
+int \fBbproc_vexecmove_io\fR(int \fInnodes\fR, int *\fInodes\fR, int \fIpids\fR,
+const char * \fIcmd\fR, char * const \fIargv\fR[], char * const \fIenvp\fR[]);
+
+
+
+.SH SEE ALSO
+\fBbproc_vrfork\fR(2),
+\fBbproc_move\fR(2),
+\fBbproc_execmove\fR(2)

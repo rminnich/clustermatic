@@ -1,0 +1,34 @@
+.\" $Id: bproc_rfork.2,v 1.3 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_RFORK 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_rfork \- fork a child onto a remote node
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_rfork\fR(int \fInode\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_rfork\fR is a combination of \fBfork\fR and \fBbproc_move\fR.
+\fBbproc_rfork\fR has the same semantics as \fBfork\fR.
+\fBbproc_rfork\fR creates a copy of the calling process on another
+node.
+
+.SH RETURN VALUE
+.PP
+On success, \fBbproc_rfork\fR returns the process ID of the child to
+the parent process and zero to the child process.  On error,
+\fBbproc_rfork\fR returns \-1 to the parent process and errno will be
+set appropriately.
+
+.SH ERRORS
+.PP
+\fBbproc_rfork\fR can return any of the errors for
+\fBfork\fR or \fBbproc_move\fR.
+
+.SH SEE ALSO
+.PP
+\fBfork\fR(2),
+\fBbproc_execmove\fR(2)
+

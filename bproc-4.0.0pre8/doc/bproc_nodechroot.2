@@ -1,0 +1,35 @@
+.\" $Id: bproc_nodechroot.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODECHROOT 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodechroot \- ask a slave daemon to perform a chroot
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodechroot\fR(int \fInode\fR, char *\fIpath\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_nodechroot\fR asks a slave daemon to perform a
+\fBchroot\fR.  This \fBchroot\fR will change the root
+directory for all processes migrated to that slave from then on.
+
+.SH RETURN VALUE
+.PP
+On  success,  zero  is returned.  On error, \-1 is returned
+and errno is set appropriately.
+
+.SH ERRORS
+.TP
+\fBEPERM\fR
+The calling process does not have permission to
+move to node.  You must be the superuser to use
+\fBbproc_nodechroot\fR.
+
+.TP
+\fBEINVAL\fR
+\fInode\fR is an invalid node number or
+\fInode\fR is down. 
+
+.TP
+\fBEBUSY\fR
+The BProc system is not running.

@@ -1,0 +1,41 @@
+.\" $Id: bproc_nodeset.3,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODESET 3 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodeset - BProc node set data structure
+.SH SYNOPSIS
+.PP
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodeset_init\fR(struct bproc_node_set_t *\fIns\fR,
+int \fIsize\fR);
+
+int \fBbproc_nodeset_grow\fR(struct bproc_node_set_t *\fIns\fR,
+int \fIsize\fR);
+
+int \fBbproc_nodeset_free\fR(struct bproc_node_set_t *\fIns\fR);
+
+struct bproc_node_info_t*\fBbproc_nodeset_node\fR(struct bproc_node_set_t
+*\fIns\fR, int \fInode\fR);
+
+int \fBbproc_nodeset_add\fR(struct bproc_node_set_t *\fIns\fR,
+struct bproc_node_info_t \fI*n\fR);
+
+int \fBbproc_nodeset_append\fR(struct bproc_node_set_t *\fIa\fR,
+struct bproc_node_set_t *\fIb\fR);
+
+.SH DESCRIPTION
+A BProc node set is a structure
+
+
+The BProc node set structure looks something like this:
+.nf
+struct bproc_node_set_t {
+    int size;
+    struct bproc_node_info_t *node;
+};
+.fi
+
+
+
+
+

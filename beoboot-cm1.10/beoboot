@@ -1,0 +1,660 @@
+#!/bin/sh
+#---------------------------------------------------------------------
+#
+# This is the LANL version of beoboot which is based on:
+#
+# Erik Arjan Hendriks <hendriks@lanl.gov>
+# Daniel Ridge <newt@scyld.com>
+# 
+# Copyright (C) 2000 Scyld Computing Corporation
+# 
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# 
+# $Id: beoboot,v 1.55 2004/11/03 23:18:01 mkdist Exp $
+#---------------------------------------------------------------------
+
+# random little programs that this script requires:
+# gzip depmod
+
+usage() {
+    cat <<EOF
+beoboot cm1.10
+Usage: beoboot [options...]
+
+This script creates Clustermatic boot images.  There are two types of
+boot images: phase 1 and phase 2.  Phase 1 is typically placed on a
+floppy or a hard disk and downloads the phase 2 image from the cluster
+front end.  The phase 2 image has the final kernel and ram disk that
+the system uses.  Phase 2 can also be placed on a floppy disk or other
+bootable media.
+
+  Options:
+    -h                               Display this message and exit.
+    -V, --version                    Display version information.
+    -v                               Enable verbose mode for debugging.
+   Image Types:
+    -1                               Create a phase 1 image.  This image
+                                     contains a minimal kernel and will
+                                     download a phase 2 image from the
+                                     master node.
+    -2                               Create a phase 2 image.  This image
+                                     contains the final kernel to run.
+   Output types:
+    -a                               Produce an ABOOT/ISO image.  (Alpha ONLY)
+    -i                               Create stand-alone images (kernel and
+                                     ramdisk).  These images will be
+                                     appropriate for use with other boot
+                                     mechanisms.  The kernel and ramdisk image
+                                     will be stored in:
+                                     outfile and outfile.initrd
+    -f                               Create a bootable 1.44m floppy disk image.
+                                     (x86 ONLY)
+    -n                               Create a netboot image suitable for
+                                     download by a phase 1 image.
+    -e                               Create an El Torito boot CD image.
+                                     (x86 ONLY)
+    -o output_file                   Set output file name to output_file.
+    -L dir, --libdir dir             Find beoboot files in dir instead
+                                     of $BEOLIB
+    --kversion ver                   Override kernel version.
+    --noautomod                      Prevent beoboot from building its own
+                                     list of boot modules.  Instead, bootmodule
+                                     lines must be present in config.boot to
+                                     include specific modules.
+    --usb                            Include USB drivers.
+    -k kernimg, --kernel kernimg     Use kernimg as the kernel image instead
+                                     of the image given in the configuration
+                                     file. (phase 2 only)
+    -c cmdline, --cmdline cmdline    Use the command line cmdline instead of
+                                     the command line given in the
+                                     configuration file.
+    -m dir, --modules dir            Look for modules matching the kernel image
+                                     in dir instead of the default which is
+                                     /lib/modules/<kernelversion>
+EOF
+}
+
+# Cleaning stuff.... 
+# CLEANUPSET is the list of things to remove if we hit an error and bail out.
+# This is only for error handling.  The functions are expected to behave
+# properly on their own if there are no errors.  "clean foo" is a shorthand
+# to add foo to the list of things to clean.
+CLEANUPSET=
+do_cleanup() {
+    for n in $CLEANUPSET ; do
+	if [ -f "$n" ] || [ -d "$n" ] ; then rm -rf "$n" ; fi
+    done
+    if [ "$1" = "error" ] ; then
+	for n in $CLEANUPERRSET ; do
+	    if [ -f "$n" ] || [ -d "$n" ] ; then rm -rf "$n" ; fi
+	done
+    fi
+}
+clean() {
+    CLEANUPSET="$CLEANUPSET $*"
+}
+cleanerr() {
+    CLEANUPERRSET="$CLEANUPERRSET $*"
+}
+
+bail() {
+    if [ -z "$*" ] ; then
+	echo "beoboot: Fatal Error (aborting)"
+    else
+	echo "beoboot: Fatal Error (aborting): $*"
+    fi
+    do_cleanup
+    exit 1
+}
+
+#---------------------------------------------------------------------
+# Configuration file handling stuff
+#---------------------------------------------------------------------
+# Usage: beoconfig tag [config_file]
+config() {
+    local TAG=$1
+    shift
+    local FILE="$*"
+    if [ -z "$FILE" ] ; then FILE=${CONFIG} ; fi
+    # These sed bits:
+    #  - strip spaces
+    #  - strip leading + trailing space
+    #  - if line starts with $TAG, strip off $TAG and print it.
+    cat ${FILE} | \
+    sed -ne "s/#.*//" \
+	 -e "s/^[[:space:]]\+//;s/[[:space:]]\+\$//" \
+         -e "/^$TAG[[:space:]]/{s/^$TAG[[:space:]]\+//;p;}"
+}
+
+configprefix() {
+    local TAG=$1
+    shift
+    for n in $*; do
+	PREFIX=`echo $n | sed -e 's![^/]*$!!'`
+	config $TAG "$n" | \
+	    sed -e 's!^[[:space:]]*\([^/]\)!'"$PREFIX"'\1!g' \
+                -e 's![[:space:]]\+\([^/]\)! '"$PREFIX"'\1!g'
+	echo			# config doesn't come with newlines...
+    done
+}
+
+#---------------------------------------------------------------------
+# Kernel module handling stuff
+#---------------------------------------------------------------------
+module_expand() {
+    local MODDIR=$1
+    local modname
+    shift
+    for modname in $* ; do
+	if ! find $MODDIR -name "$modname.ko" ; then
+	    echo >2 "WARNING:  Couldn't find a module named $n"
+	fi
+    done
+}
+
+# module_dep - Prints all the dependencies (full path names) for a given
+#              module.
+#
+#module_dep() {
+#    local MODDIR="$1"
+#    local MOD="$2"
+#    local DEPS=
+#    local dep
+#    DEPS=`module_expand $MODDIR \`$BEOLIB/bin/modhelper -d "$MOD"\``
+#    for dep in $DEPS; do
+#	echo "$dep"
+#	module_dep "$MODDIR" "$dep"
+#    done
+#}
+
+module_dep() {
+    sed -n 's!'"$2"': *!!p' "$1/modules.dep"
+}
+
+# This gets a list of network drivers by grabbing all the modules in
+# the kernel's drivers/net directory and then listing all those with
+# a PCI ID mapping in the pci table.
+module_auto_net_drivers() {
+    local MODLIST=""
+    for dir in `find $1 -type d -name net`; do
+	for mod in `find $dir -name \*.ko` ; do
+	    if $BEOLIB/bin/modhelper -p $USBARG "$mod" ; then
+		MODLIST="$MODLIST $mod"
+	    fi
+	done
+    done
+    echo "$MODLIST"
+}
+
+module_auto_usb_host_drivers() {
+    local MODLIST=""
+    for mod in `find $1/kernel/drivers/usb/host -name \*.ko` ; do
+	if $BEOLIB/bin/modhelper -p "$mod" ; then
+	    MODLIST="$MODLIST $mod"
+	fi
+    done
+    echo "$MODLIST"
+}
+
+#
+# module_copy - copy a set of modules to the initrd
+#
+module_copy() {
+    local MODDIR=$1/
+    local DESTDIR=$2
+    shift;shift
+    local MODLIST
+    local DEPS
+
+    [ $VERBOSE ] && echo >&2 "Copying modules:"
+
+    # Sanity check a little....
+    if [ ! -d $MODDIR ] ; then
+	bail "kernel module directory $MODDIR is missing."
+    fi
+
+    mkdir -p $DESTDIR/modules
+
+    # Automatically included modules
+    MODLIST=`module_expand $MODDIR $*`
+    if [ -n "$AUTOMODLIST" ] ; then
+	MODLIST="$MODLIST `module_auto_net_drivers $MODDIR`"
+	if [ -n "$USB" ] ; then
+	    MODLIST="$MODLIST `module_auto_usb_host_drivers $MODDIR`"
+	fi
+    fi
+
+    # Get additional boot-time modules from the plugin list
+    M=`config bootmodule $CONFIG.boot $PLUGIN_LIST`
+    MODLIST="$MODLIST `module_expand $MODDIR $M`"
+
+    # Suck in dependencies for our modules.
+    for mod in $MODLIST; do
+	MODLIST="$MODLIST `module_dep $MODDIR $mod`"
+    done
+
+    MODLIST=`echo $MODLIST | tr ' ' '\n' | sort | uniq`
+    for mod in $MODLIST; do
+	[ $VERBOSE ] && echo >&2 "  $mod"
+	if ! cp $mod $DESTDIR/modules ; then
+	    echo >&2 "Error copying $mod"
+	fi
+    done
+}
+
+# copy_devicenode - copies a device node
+#
+#
+copy_devicenode() {
+    local DESTDIR="$1"
+    local dev
+    shift
+    
+    for dev in $*; do
+	ln -s "`$BEOLIB/bin/devhelper /dev/$dev`" $DESTDIR/dev/$dev
+    done
+}
+
+# This one copies files for plugins.  Hence the frobbing of path
+# prefixes to try and get everything right.  Note that the filename
+# can contain a '>' to allow for different source and destination paths.
+copy_files() {
+    local TMPDIR=$1
+    # Copy extra files for plugins
+    for file in `configprefix file $PLUGIN_LIST`; do
+	SRC=`echo "$file" | sed -e 's/>.*//'`
+	DST=`echo "$file" | sed -e 's/.*>//'`
+	PREFIX=`echo $DST | sed -e 's/[^/]*$//'`
+
+	if [ -n "$PREFIX" ] ; then mkdir -p $TMPDIR/$PREFIX || bail; fi
+	cp -p $SRC $TMPDIR/$DST || bail
+    done
+}
+
+# create_init - link the init binary possibly linking with other stuff.
+#
+create_init() {
+    local PHASE=$1
+    local DEST=$2
+    local CFLAGS="-static -s"
+    local LIBS="-lbproc $3"
+    local PLUGINOBJS=`configprefix plugin $PLUGIN_LIST`
+    local PLUGINLIBS=`config library $PLUGIN_LIST`
+
+    # This is a bad hack, this stuff should be autoconf'ed in or something.
+    if [ $BEOLIB = /usr/lib64/beoboot ] ; then
+	CFLAGS="-m64 $CFLAGS"
+    else
+	CFLAGS="-m32 $CFLAGS"
+    fi
+
+    # We're just using cc for the linking step.  We'd skip straight to
+    # ld except that cc has a bunch of magic linker scripts.
+    cc $CFLAGS -o $DEST $BEOLIB/lib/init${PHASE}.o \
+	$PLUGINOBJS $LIBS $PLUGINLIBS \
+    || bail "Failed to build init for ramdisk image."
+}
+
+#---------------------------------------------------------------------
+# Generic initrd creation stuff.
+#---------------------------------------------------------------------
+create_initrd() {
+    local PHASE="$1"
+    local OUTFILE="$2"
+    local DEVLIST="/dev/console\\n/dev/zero"
+    local TMPDIR=`mktemp -d /tmp/beoboot.XXXXXX` || bail
+    clean ${TMPDIR}		# Add to cleanup set
+
+    mkdir -p $TMPDIR/modules                             || bail
+    cat $CONFIG.boot $PLUGIN_LIST > $TMPDIR/config.boot  || bail
+    copy_files $TMPDIR                                   || bail
+    create_init $PHASE $TMPDIR/init -lbpslave            || bail
+    if [ "$PHASE" = "1" ] ; then
+	module_copy $MODDIR $TMPDIR kmonte               || bail
+    elif [ "$PHASE" = "2" ]; then
+	module_copy $MODDIR $TMPDIR bproc                || bail
+    fi
+
+    # Get a list of devices.
+    for n in `config device $PLUGIN_LIST` ; do
+	if [ -b "$n" -o -c "$n" ] ; then
+	    DEVLIST="$DEVLIST\\n$n"
+	elif [ -b "/dev/$n" -o -c "/dev/$n" ] ; then
+	    DEVLIST="$DEVLIST\\n/dev/$n"
+	else
+	    bail "Couldn't find device $n."
+	fi
+    done
+
+    # Assemble initramfs...
+    [ $VERBOSE ] && echo >&2 -n "Compressing file system image..."
+    (cd $TMPDIR; find .             | cpio -o -H newc --quiet;
+     cd /      ; echo -e "$DEVLIST" | cpio -o -H newc --quiet) \
+	 | gzip -c9 > "$OUTFILE"
+    [ $VERBOSE ] && echo >&2 " done."
+
+    # DEBUG: spit out the contents
+#    ls -l "$OUTFILE"
+#    zcat "$OUTFILE" | (cpio -tv ; cpio -tv)
+}
+
+#---------------------------------------------------------------------
+# Boot image generation functions:
+# All have the following usage:
+#  func <imagefile> <kernelimg> <ramdiskimg>
+
+# create_syslinux_boot_floppy - create a bootable syslinux floppy image
+# Usage: create_syslinux_boot_floppy IMAGEFILE KERNELIMG RAMDISKIMG [kernel command line ...]
+create_x86floppy_image() {
+    local IMAGEFILE KERNFILE INITRDFILE CMDLINE MTOOLSRC
+    IMAGEFILE=$1  ; shift
+    KERNFILE=$1   ; shift
+    INITRDFILE=$1 ; shift
+    CMDLINE="$*"
+
+    # Setup for mtools to operate on a file...
+    MTOOLSRC=/tmp/beoboot.mtoolrc.$$
+    clean $MTOOLSRC $IMAGEFILE
+    echo "drive v: file=\"$IMAGEFILE\" exclusive mformat_only 1.44m" > $MTOOLSRC
+    export MTOOLSRC
+
+    if [  -b $IMAGEFILE ] ; then
+	# Don't start by deleting the target if this is not a regular file.
+	if ! mformat -B $BEOLIB/boot/syslinux.bs v: ; then bail ; fi     # create image w/ boot sector
+    else
+	if ! rm -f $IMAGEFILE ; then bail ; fi
+	if ! mformat -C -B $BEOLIB/boot/syslinux.bs v: ; then bail ; fi  # create image w/ boot sector
+    fi
+    if ! mcopy $BEOLIB/boot/ldlinux.sys v:          ;then bail;fi # boot loader
+    if ! mcopy $KERNFILE                v:vmlinuz   ;then bail;fi # kernel
+    if ! mcopy $INITRDFILE              v:initrd.img;then bail;fi # initrd
+    cat <<EOF | mcopy -                 v:syslinux.cfg
+default beoboot
+label   beoboot
+  kernel vmlinuz
+  append initrd=initrd.img $CMDLINE
+prompt  0
+timeout 100
+EOF
+    if [ "$?" != 0 ] ;then bail;fi
+    # clean up...
+    rm -f $MTOOLSRC
+    echo "Floppy image is in: $IMAGEFILE"
+}
+
+create_netboot_image() {
+    local IMAGEFILE KERNFILE INITRDFILE CMDLINE
+    IMAGEFILE=$1  ; shift
+    KERNFILE=$1   ; shift
+    INITRDFILE=$1 ; shift
+    CMDLINE="$*"
+
+    cleanerr $IMAGEFILE
+    if ! $BEOLIB/bin/mkbootimg -i $INITRDFILE $KERNIMG $CMDLINE > $IMAGEFILE ; then
+	bail
+    fi
+    echo "Netboot image is in: $IMAGEFILE"
+}
+
+# alpha boot standard (using CD)
+create_abootiso_image() {
+    local IMAGEFILE="$1"
+    local KERNFILE="$2"
+    local INITRDFILE="$3"
+    local CMDLINE="$4"
+
+
+    TMPDIR=/tmp/.beoboot.aboot.$$
+    clean $TMPDIR $IMAGEFILE
+    if ! mkdir $TMPDIR                      ;then bail;fi
+    if ! cp /boot/bootlx $TMPDIR/bootlx     ;then bail;fi  # The boot loader
+    if ! cp $KERNFILE    $TMPDIR/vmlinuz    ;then bail;fi
+    if ! cp $INITRDFILE  $TMPDIR/initrd.img ;then bail;fi
+    cat <<EOF >     $TMPDIR/aboot.conf
+0:vmlinuz initrd=initrd.img $CMDLINE
+1:vmlinuz initrd=initrd.img console=ttyS0 $CMDLINE
+EOF
+    if [ "$?" != 0 ]                        ;then bail;fi
+    mkisofs -r -o $IMAGEFILE $TMPDIR   || bail
+    isomarkboot $IMAGEFILE bootlx      || bail
+
+    rm -rf $TMPDIR                      # Clean up
+    echo "Aboot image is in: $IMAGEFILE"
+}
+
+# x86 CD boot standard
+create_eltorito_image() {
+    local IMAGEFILE="$1"
+    local KERNFILE="$2"
+    local INITRDFILE="$3"
+    local CMDLINE="$4"
+
+    TMPDIR=`mktemp -d /tmp/beoboot.XXXXXX` || bail
+    clean $TMPDIR
+
+    echo "THIS NEEDS TO KNOW HOW TO LOOK FOR isolinux.bin"
+    cp /usr/share/syslinux/isolinux.bin $TMPDIR || bail
+    cp "$KERNFILE"    $TMPDIR/kernel          || bail
+    cp "$INITRDFILE"  $TMPDIR/initrd          || bail
+    cat <<EOF >       $TMPDIR/isolinux.cfg    || bail
+default beoboot
+label   beoboot
+  kernel kernel
+  append initrd=initrd $CMDLINE
+prompt  0
+timeout 100
+EOF
+    mkisofs -quiet -r -o $IMAGEFILE \
+	-b isolinux.bin -no-emul-boot -boot-info-table $TMPDIR \
+	|| bail "Failed to create boot image."
+}
+
+create_images_image() {
+    local IMAGEFILE="$1"
+    local KERNFILE="$2"
+    local INITRDFILE="$3"
+    local CMDLINE="$4"
+
+    cleanerr "$IMAGEFILE.kernel" "$IMAGEFILE.initrd"
+    if ! cp "$KERNFILE"   "$IMAGEFILE.kernel" ;then bail;fi
+    if ! cp "$INITRDFILE" "$IMAGEFILE.initrd" ;then bail;fi
+
+    echo "Kernel image is:        \"$IMAGEFILE.kernel\"."
+    echo "Initial ramdisk is:     \"$IMAGEFILE.initrd\"."
+    echo "Kernel command line is: \"$CMDLINE\""
+}
+
+chkarg() {
+    if [ $1 = 1 ] ; then
+	usage
+	exit 1
+    fi
+}
+
+
+# Add a plugin to our list of plugins
+add_plugin() {
+    # Figure out where it lives and include the full/relative path on
+    # the list.
+    if [ -f "$1" ] ; then
+	PLUGIN_LIST="$PLUGIN_LIST $1"
+	[ "$VERBOSE" ] && echo >&2 "Adding plugin $1"
+    elif [ -f "$BEOLIB/plugins/$1" ] ; then
+	PLUGIN_LIST="$PLUGIN_LIST $BEOLIB/plugins/$1"
+	[ "$VERBOSE" ] && echo >&2 "Adding plugin $BEOLIB/plugins/$1"
+    else
+	echo "Failed to find plugin $1"
+	exit 1
+    fi
+}
+
+#---------------------------------------------------------------------
+# Script starts here
+#---------------------------------------------------------------------
+# Configuration defaults
+CONFIG=/etc/clustermatic/config
+
+# This is a bad hack.  We should use autoconf or something and make
+# this part of the build-time configuration.
+if [ -d /usr/lib64/beoboot ] ; then
+    BEOLIB=/usr/lib64/beoboot
+elif [ -d /usr/lib/beoboot ] ; then
+    BEOLIB=/usr/lib/beoboot
+else
+    echo >&2 "Couldn't find beoboot lib directory."
+    exit 1
+fi
+
+PATH=/sbin:/usr/sbin:$PATH
+ARCH=`uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/`
+PLUGINLIB=$BEOLIB/lib
+
+HAVECMDLINE=
+IMGTYPE=
+OUTTYPE=
+OUTFILE=
+PLUGIN_LIST=
+VERBOSE=
+AUTOMODLIST=y
+USB=
+USBARG=
+
+# Brand new option processing cruft (Note: throws away positional arguments for now)
+while [ -n "$1" ] ; do
+    case "$1" in
+# General options:
+	-V|--version) echo "beoboot cm1.10" ; exit 0 ;;
+	-h|--help)    usage; exit 0 ;;
+	-v) VERBOSE=1         ;;
+	-1) IMGTYPE=1         ;;
+	-2) IMGTYPE=2         ;;
+	-i) OUTTYPE=images    ;;
+	-f) OUTTYPE=x86floppy ;;
+	-n) OUTTYPE=netboot   ;;
+	-e) OUTTYPE=eltorito  ;;
+	-a) OUTTYPE=abootiso  ;;
+	--noautomod)  AUTOMODLIST= ;;
+	-u|--usb)     USB=y;USBARG=-u ;;
+	-o|--output)  chkarg $#; OUTFILE=$2 ; shift ;;
+
+	-L|--libdir)  chkarg $#; BEOLIB=$2 ; shift ;;
+	-C|--config)  chkarg $#; CONFIG=$2 ; shift ;;
+	--kversion)   chkarg $#; KVER=$2; shift ;;
+
+#	--bootplugin) chkarg $#; BOOTPLUGIN="$BOOTPLUGIN $2" ; shift ;;
+#	--bootlib)    chkarg $#; BOOTLIB="$BOOTLIB $2" ; shift ;;
+#	--bootdev)    chkarg $#; BOOTDEV="$BOOTDEV $2" ; shift ;;
+	--plugin)     chkarg $#; add_plugin $2 ; shift ;;
+
+# Phase 2 options:
+	-k|--kernel)  chkarg $#; KERNIMG=$2; shift ;;
+	-c|--cmdline) chkarg $#; HAVECMDLINE=1; CMDLINE=$2 ; shift;;
+	-m|--modules) chkarg $#; MODDIR=$2;  shift ;;
+	-d) DEBUG=1 ;;
+	-*) usage ; exit 1 ;;
+        *) break ;;
+    esac
+    shift
+done
+# We don't take any positional arguments...
+if [ $# != "0" ] ; then usage ; exit 1 ; fi
+
+if [ -z "$IMGTYPE" ] ; then
+    echo >&2 "You need to specify an image type.  (-1 or -2)"
+    exit 1
+fi
+if [ -z "$OUTTYPE" ] ; then
+    echo >&2 "You need to specify an output type."
+    exit 1
+fi
+
+if [ -z "$OUTFILE" ] ; then
+    # Apply default output file names as appropriate...
+    case "$IMGTYPE$OUTTYPE" in
+    1x86floppy) OUTFILE=/var/clustermatic/nodeboot.img ;;
+    1netboot)                                             ;;
+    1images)                                              ;;
+    2x86floppy) OUTFILE=/var/clustermatic/nodeboot.img ;;
+    2netboot)
+	# Pick the default bootfile only.
+	OUTFILE=`config bootfile | \
+		   sed -ne '/^[[:space:]]*[^[:space:]]\+[[:space:]]*$/p'`
+	if [ -z "$OUTFILE" ] ; then
+	    OUTFILE=/var/clustermatic/boot.img
+	fi;;
+    2images)                                              ;;
+    *) ;;
+    esac
+    if [ -z "$OUTFILE" ] ; then
+	echo >&2 "You need to specify an output file name. (-o)"
+	exit 1
+    fi
+fi
+
+# Fill in more defaults....
+if [ "$IMGTYPE" = 1 ] ; then
+    CMDLINE="apm=off acpi=off $CMDLINE" # Force apm=off this...
+    if [ -z "$KERNIMG" ] ; then
+	KERNIMG=`echo /boot/vmlinuz*beoboot | head -1`
+	[ -e "$KERNIMG" ] || KERNIMG=""
+    fi
+fi
+
+# Fill in more defaults from the configuration files...
+if [ "$IMGTYPE" = 2 ] ; then
+    if [ -z "$KERNIMG" ] ; then	    KERNIMG=`config kernelimage` ; fi
+    if [ -z "$HAVECMDLINE" ] ; then CMDLINE=`config kernelcommandline` ; fi
+fi
+
+# Figure out the kernel details
+if [ -z "$KERNIMG" ] ; then 
+    if [ -f "/boot/vmlinuz-"`uname -r` ] ; then
+	KERNIMG="/boot/vmlinuz-"`uname -r`
+    elif [ -f "/boot/vmlinux-"`uname -r` ] ; then
+	KERNIMG="/boot/vmlinux-"`uname -r`
+    else
+	KERNIMG="(none)"
+    fi
+fi
+if [ ! -f "$KERNIMG" ] ; then
+    echo >&2 "Couldn't find kernel image: $KERNIMG"
+    echo >&2 "Use -k to specify a kernel image."
+    exit 1
+fi
+[ "$KVER" = "" ] && KVER=`$BEOLIB/bin/kver $KERNIMG`
+if [ -z "$KVER" ] ; then
+    echo >&2 "Couldn't determine version of $KERNIMG"
+    exit 1
+fi
+if [ -z "$MODDIR" ] ; then MODDIR=/lib/modules/$KVER ; fi
+
+if [ $VERBOSE ] ; then
+    echo "KERNIMG: $KERNIMG"
+    echo "KVER:    $KVER"
+    echo "MODDIR:  $MODDIR"
+    echo "CMDLINE: $CMDLINE"
+fi
+
+# Front load the module dependency check....
+depmod -A $KVER || bail "modules.dep not up to date and couldn't run depmod."
+[ -r "$MODDIR/modules.dep" ] ||  bail "No $MODDIR/modules.dep"
+
+TMPINITRAMFS=`mktemp /tmp/beoboot.XXXXXX` || bail
+clean $TMPINITRAMFS
+create_initrd ${IMGTYPE} ${TMPINITRAMFS}
+create_${OUTTYPE}_image $OUTFILE ${KERNIMG} ${TMPINITRAMFS} "$CMDLINE"
+
+do_cleanup
+exit 0

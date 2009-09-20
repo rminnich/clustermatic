@@ -1,0 +1,46 @@
+.TH NODEADD 8 "" "Beoboot cm1.10" "Beoboot Administrator's Manual"
+.SH NAME
+nodeadd \- The Beoboot automatic node addition program
+
+.SH SYNOPSIS
+\fBnodeadd\fR \fB-h\fR
+
+\fBnodeadd\fR \fB-V\fR
+
+\fBnodeadd\fR [\fB-n\fR \fInumber\fR] [\fB-a\fR] [\fB-e\fR]
+
+.SH DESCRIPTION
+.PP
+\fBnodeadd\fR is a small network sniffer which will sniff for RARP
+requests and automatically add them as nodes to the beoboot
+configuration file.  nodeadd will continue adding nodes until it is
+killed.
+
+.TP
+\-h, \-\-help
+Print a help message and exit.
+.TP
+\-V, \-\-version
+Print version information and exit.
+.TP
+\-n \fInumber\fR, \-\-node \fInumber\fR
+Start node numbering for new nodes at \fInumber\fR.  By default
+nodeadd will read the existing configuration file and start adding new
+nodes after the highest number node in the file.  This option has no
+effect unless the every node (\-e) option is also used.
+.TP
+\-a, \-\-auto
+Automatically cause beoserv to reload the configuration file after
+every new node is added.  This is done by sending a SIGHUP to beoserv.
+.TP
+\-e, \-\-every
+Explicitly number every entry in the configuration file.  By default
+nodeadd will omit the node number from the \fBnode\fR configuration
+line allowing the nodes to be implicitly numbered.  By default, the
+numbering for new nodes will start at 0.  Use the node number (\-n)
+option to change the first node number.
+
+.SH SEE ALSO
+.PP
+\fBbeoserv\fR(8),
+\fBbeoboot_config\fR(5)

@@ -1,0 +1,631 @@
+%\documentclass{article}
+%\makeindex
+%\usepackage{makeidx}
+
+%\begin{document}
+
+\chapter{BProc Messages}
+
+This chapter describes the messages that BProc uses to communicate
+between the kernel layers and the master and slave daemons.  BProc
+messages fixed size as defined by \texttt{struct bproc\_request\_t} in
+\texttt{kernel/bproc.h}.  This structure and the message types are not
+intended to be a stable interface.  This is strictly a BProc internal
+and may change with every revision of BProc.
+
+In BProc 3, the goal was to create a message structure which would
+allow for a very simple message routers in the daemons and kernel
+layers.  Earlier versions of the BProc message routers (the master and
+slave daemons and to a lesser extent the char device code in the
+kernel) were huge complicated case statements.  Adding a new message
+type to the system required updating in 6 or more places even though
+only two places really need to know about the message type at all.
+
+To accomplish this goal, we will try to improve the request header so
+that the routing pieces can get the information they need without
+having to know anything about what the payload of the message is.
+(Part of this improvement will be the addition of generic
+source/destination information.)
+
+\section{Definitions}
+\begin{description}
+
+\item{Real process}\\
+In BProc there is a ghost and real process.  The real process is the
+one where the computation actually happens.  The ghost is a place
+holder in the process table on the front end which represents the
+remote process and does some work on its behalf.
+
+\item{Ghost process}\\
+This is the place holder process on the front end.
+
+\item{Request}\\
+A message to a remote entity which requires a response.  The requester
+will usually block in the (D) state while waiting for the response.
+
+\item{Notification}\\
+A message which has no response.
+\end{description}
+
+
+\section{Message Assumptions:}
+
+The message handling infrastructure is built with the following assumptions:
+
+\begin{itemize}
+
+\item Ghosts cannot emit messages which require responses.
+
+\item Ghosts only emit messags which are for their corresponding real process.
+
+\item Ghosts can only receive requests from their real process.  That
+    is ghosts only talk to their real processes.
+
+\item Real processes cannot be the destination of any messages.  This
+    is because they are normal processes.  They are not prepared to
+    handle a request from anywhere.  There are exceptions to this
+    rule.  In those cases, the message is actually handled by the
+    slave or master daemon.
+
+\item Ghosts all exist on the master node.
+
+\item Real processes may exist either on the master node or a slave node.
+
+\item No process has more than one outstanding request at a time.  The
+    only exception to this rule is GET\_STATUS but responses to
+    GET\_STATUS are not handled via the usual mechanisms.
+
+\end{itemize}
+
+\subsection{Automatic Error Cleanup By Master Daemon}
+
+The master daemon keeps track of outstanding requests so that it can
+automatically create an error response in case the slave daemon that
+the request was sent to goes down.  In order to automatically generate
+an error response the message must be:
+
+\begin{itemize}
+\item from a real process or a ghost.  (i.e. not from a node)
+\item to a node or another real process.  (i.e. not to a ghost)
+\end{itemize}
+
+If the slave that message was sent to goes down, the master will
+automatically generate a response with \texttt{-EIO} in the result
+field.
+
+
+\newcommand{\msg}[1]{\texttt{#1}
+                     \index{\texttt{#1}}
+                     \index{\texttt{BPROC\_#1}}
+% Need this but need to figure out how to sanitize text inline
+%                     \label{msg:#1}
+}
+
+\begin{tabular}{lcccp{1.5in}}
+\hline
+Message Name & Resp & From & To & Description\\
+\hline
+\msg{CHILD\_ADD}           & N & R    & R   \\
+\msg{CHILD\_DEL}           & N & R    & R   \\
+\msg{CONT}                 & N & Rs   & G   & Masq process continue. \\
+\msg{EXEC}                 & Y & Rs   & G   & Masq process stopped. \\
+\msg{EXIT}                 & N & Rs   & G   & Exit notification. \\
+\msg{FWD\_SIG}             & N & G    & Rs  & Get remote process status \\
+\msg{GET\_STATUS}
+\footnote{GET\_STATUS requests get generated when a process accesses the /proc
+   file system on the front end node.  (Ordinary programs like \texttt{ps}
+   will generate these.)  Like FWD\_SIG, these are directed to a
+   particular PID but are actually handled on the slave daemon where
+   the real process for that PID exists.}  & Y & Rm   & Rs/S  \\
+\msg{ISORPHANEDPGRP}       & Y & R    & G   \\
+\msg{MOVE}                 & Y & R    & S/G \\
+\msg{MOVE\_COMPLETE}       & Y & R    & R   \\
+\msg{NODE\_CHROOT}         & Y & R    & S   \\
+\msg{NODE\_EOF}            & N & M/S  & M/S \\
+\msg{NODE\_HALT}           & Y & R    & S   \\
+\msg{NODE\_INFO}           & Y & R    & M   \\
+\msg{NODE\_PING}           & Y & M/S  & M/S \\
+\msg{NODE\_PWROFF}         & Y & R    & S   \\
+\msg{NODE\_RECONNECT}      & Y & R    & S   \\
+\msg{NODE\_REBOOT}         & Y & R    & S   \\
+\msg{NOTIFY}               & Y & M    & S   \\
+\msg{PARENT\_EXIT}         & N & R    & Rs  \\
+\msg{PGRP\_CHANGE}         & N & R    & R   \\
+\msg{PROC\_INFO}           & Y & R    & M   \\
+\msg{PTRACE}               & Y & R    & S/G & \tiny{Remote \texttt{ptrace} syscall.}\\
+\msg{SET\_CREDS}           & Y & R    & G   \\
+\msg{STOP}                 & N & Rs   & G   \\
+\msg{SYS\_FORK}            & Y & Rs   & G   \\
+\msg{SYS\_KILL}            & Y & Rs   & G   \\
+\msg{SYS\_GETPGID}         & Y & Rs   & G   \\
+\msg{SYS\_GETSID}          & Y & Rs   & G   \\
+\msg{SYS\_SETPGID}         & Y & Rs   & G   \\
+\msg{SYS\_SETSID}          & Y & Rs   & G   \\
+\msg{WAIT}                 & N & Rs   & G   & \texttt{wait} notify\\
+\hline
+\end{tabular}
+
+\begin{tabular}{ll}
+Dest & Description \\
+\hline
+G  & Ghost process \\
+M  & Master daemon \\
+R  & Real process on the master or a slave \\
+Rm & Real process on the master \\
+Rs & Real process on a slave \\
+S  & Slave daemon
+\end{tabular}
+
+\section{Detailed message descriptions}
+
+This section describes each of the BProc messages in detail.  Each
+message has a description of the message's purpose and list of which
+fields in the BProc request structure are relevant for each request
+and response.
+
+\begin{description}
+
+\newcommand{\foowidth}{2.5in}
+
+% Macros for formatting the request/response argument blocks
+\renewcommand{\msg}[1]{\item{\texttt{#1}}
+                       \index{\texttt{#1}}
+                       \index{\texttt{BPROC\_#1}}
+% Need this but need to figure out how to sanitize text inline
+%                     \label{msg:#1}
+                       \nopagebreak
+}
+\newcommand{\pD}{master or slave daemon {}}
+\newcommand{\pG}{ghost process {}}
+\newcommand{\pM}{master daemon {}}
+\newcommand{\pR}{real process on master or slave {}}
+\newcommand{\pRm}{real process on master {}}
+\newcommand{\pRs}{real process on slave {}}
+\newcommand{\pS}{slave daemon {}}
+
+\newcommand{\sa}[1]{See also \texttt{#1}.}
+\newcommand{\response}{\multicolumn{3}{l}{Response}\\}
+\newcommand{\noresponse}{
+  \multicolumn{3}{l}{Response}\\
+  \qquad & \multicolumn{2}{l}{\emph{No Response}} \\
+}
+\newcommand{\norequest}{
+  \qquad & \multicolumn{2}{l}{\emph{No Request}} \\
+}
+\newcommand{\rr}[2]{\qquad & #1 & #2 \\}
+\newenvironment{reqresp}{
+\begin{tabular}{llp{\foowidth}}
+\multicolumn{3}{l}{Request}\\
+}{
+\end{tabular}
+}
+
+\msg{CHILD\_ADD}
+
+  Add a child process to a remote child.  This message updates a
+  remote process's non-local child counter.  This message is used when
+  \texttt{clone} is called with \texttt{CLONE\_PARENT},
+  \texttt{CLONE\_THREAD}, \texttt{CLONE\_PTRACE} or any other flag
+  which causes a process other than the \texttt{clone} caller to
+  become the new parent process.
+
+  \begin{reqresp}
+  \rr{TO  }{\pRs}
+  \rr{FROM}{\pRm or \pG}
+  \response
+  \rr{TO  }{\pRm or \pG}
+  \rr{FROM}{\pRs}
+  \end{reqresp}
+
+\msg{CONT}
+
+  When a remote process wakes up from a stopped state, it sends this
+  message to the ghost process on the front end.  The ghost on the
+  front end updates its state to reflect this change.  \sa{STOP}
+
+  \begin{reqresp}
+  \rr{TO  }{\pG}
+  \rr{FROM}{\pRs}
+  \noresponse
+  \end{reqresp}
+
+\msg{EXEC}
+
+  \texttt{EXEC} is sent to the ghost process to request that the ghost
+  perform an \texttt{execve} system call and transfer the resulting
+  memory image back to the slave.  This request closely resembles a
+  \texttt{MOVE} call except that the calling process never leaves the
+  node that it is on.
+
+  \begin{reqresp}
+  \rr{TO             }{\pG}
+  \rr{FROM           }{\pRs}
+  \rr{bpr\_move\_addr}{IPv4 Address to connect to for
+                       \texttt{execve} arguments}
+  \rr{bpr\_move\_port}{IPv4 port number to connect to for
+                       \texttt{execve} arguments}
+  \response
+  \rr{TO    }{\pRs}
+  \rr{FROM  }{\pG}
+  \rr{result}{The result of the \texttt{execve} and subsequent send
+              calls.  zero indicates success. }
+  \end{reqresp}
+
+\msg{EXIT}
+
+  When a process running on a slave node exits, it sends a
+  \texttt{EXIT} message to its ghost on the front end.  This instructs
+  the ghost to exit with the same status as the real process.
+
+  If the \texttt{BPROC\_SILENT\_EXIT} bit is set in the exit status,
+  the ghost will silently remove itself from the process tree on the
+  front end.  The parent will not receive the exit signal and will not
+  see the exited process with \texttt{wait}.  This is used internally
+  by \texttt{bproc\_rfork} to cleanup failures when called on slave
+  nodes.
+
+  \begin{reqresp}
+  \rr{TO  }{\pG}
+  \rr{FROM}{\pRs}
+  \rr{result}{exit status as returned from \texttt{wait}.}
+  \rr{bpr\_status\_utime }{Total user time used by the process. }
+  \rr{bpr\_status\_stime }{Total system time used by the process. }
+  \rr{bpr\_status\_cutime}{Total user time used by children of the process. }
+  \rr{bpr\_status\_cstime}{Total system time used by children of the process. }
+  \noresponse
+  \end{reqresp}
+
+\msg{FWD\_SIG}
+
+  The ghost sends this message to the real process to forward a signal
+  it has received.  This signal has already passed permission checks
+  and will not be checked further before delivery.
+
+  \begin{reqresp}
+  \rr{TO}{\pRs}
+  \rr{FROM}{\pG}
+  \rr{bpr\_sig\_info}{packed signal information}
+  \noresponse
+  \end{reqresp}
+
+\msg{GET\_STATUS}
+
+  Processes running on the master send \texttt{GET\_STATUS} messages
+  when they access \texttt{/proc} entries for ghost processes.  There
+  are two forms of the \texttt{GET\_STATUS} message.  One is a status
+  request for a single process, the other is a global status update
+  request.
+
+  \textbf{SPECIAL CASE ROUTING:} This message violates all the norms
+  for message traffic in the system.  In the case the message is
+  routed to a specific remote process, the slave daemon will respond
+  with status for that process.  In the case that the message is sent
+  to the master daemon, the master daemon copies the message to each
+  slave daemon.  The slave daemon will then send a response for
+  \emph{every} process that that slave is managing.
+
+  Responses are routed to the master node, not the requesting process.
+  The requesting process receives the response by waiting for the
+  ghost's status to update.  This allows multiple requesting processes
+  to receive status without duplicating message traffic on the
+  network.
+
+  \begin{reqresp}
+  \rr{TO  }{\pRs or \pM}
+  \rr{FROM}{\pM}
+  \response
+  \rr{TO}{\pM}
+  \rr{FROM}{\pRs}
+  \rr{bpr\_status\_state }{The process's state (sleeping, running,
+                           disk wait, stopped, etc.) }
+  \rr{bpr\_status\_utime }{Total user time used by the process. }
+  \rr{bpr\_status\_stime }{Total system time used by the process. }
+  \rr{bpr\_status\_cutime}{Total user time used by children of the process. }
+  \rr{bpr\_status\_cstime}{Total system time used by children of the process. }
+  \end{reqresp}
+
+\msg{ISORPHANEDPGRP}
+
+  This message asks the master node if a particular process group is
+  orphaned.  The master needs to answer this question since checking
+  the entire process tree is required to answer it.  This is relevant
+  for signal delivery.
+
+  \begin{reqresp}
+  \rr{TO             }{\pM}
+  \rr{FROM           }{\pRs}
+  \rr{bpr\_pgrp\_pgid}{The process group to query}
+  \response
+  \rr{TO    }{\pRs}
+  \rr{FROM  }{\pM}
+  \rr{result}{non-zero is the process group is orphaned, otherwise zero}
+  \end{reqresp}
+
+\msg{MOVE}
+
+  This is the migration request message.  It is sent from a real
+  process to one of the daemons or the real process's ghost on the
+  front end to initiate migration.
+
+  \begin{reqresp}
+  \rr{TO                  }{\pR}
+  \rr{FROM                }{\pS or \pG}
+  \rr{bpr\_move\_oppid    }{original parent process ID.}
+  \rr{bpr\_move\_ppid     }{current parent process ID.}
+  \rr{bpr\_move\_pgrp     }{process process group ID}
+  \rr{bpr\_move\_session  }{process session ID}
+  \rr{bpr\_move\_exit\_sig}{process exit signal (i.e. SIGCHLD)}
+  \rr{bpr\_move\_addr     }{IPv4 address to connect back to for process data}
+  \rr{bpr\_move\_port     }{Port number to connect back to for process data}
+  \rr{bpr\_move\_euid     }{Effective user ID of process}
+  \rr{bpr\_move\_egid     }{Effective group ID of process}
+  \rr{bpr\_move\_groups   }{Supplementary groups}
+  \rr{bpr\_move\_children }{Total number of child processes}
+  \rr{bpr\_move\_resend   }{Number of times to resend process data.}
+  \response
+  \rr{TO                  }{\pR}
+  \rr{FROM                }{\pS or \pG}
+  \rr{result              }{result of move operation.  zero indicates success.}
+  \rr{bpr\_move\_r\_addr  }{IPv4 address to connect to for resends.}
+  \rr{bpr\_move\_r\_port  }{IPv4 port number to connect to for resends.}
+  \rr{bpr\_move\_r\_comm  }{Value of comm after receiving move data.}
+  \rr{bpr\_move\_r\_creds }{Process credentials after receiving data.}
+  \end{reqresp}
+
+\msg{MOVE\_COMPLETE}
+
+  This message is another strange message.  It is used only in
+  response form.  It is used to finish the vector move types and to
+  clean up after failed moves in pretty much all cases.
+
+  In a vector move, the receiver will sit around waiting for resend
+  requests until a \texttt{MOVE\_COMPLETE} is received telling it to
+  go on.
+
+  In failed moves of any kind, if the sender is the node that goes
+  away, a \texttt{MOVE\_COMPLETE} is sent to the receiver telling it
+  to go on.
+
+  This message is only ever used in the response form for a number of
+  reasons.  First of all, ghost is the only process type that comes
+  with a request queue.  For real processes, the only way to receive
+  messages is to have an outstanding request.  Also, in the vector
+  move cases, having an outstanding \texttt{MOVE\_COMPLETE} request
+  allows us to use existing error recovery infrastructure to clean up
+  after node failures.
+
+  \begin{reqresp}
+  \norequest
+  \response
+  \rr{TO  }{\pR}
+  \rr{FROM}{\pR or \pM}
+  \rr{message ID}{from corresponding move or PID.}
+  \end{reqresp}
+
+\msg{NODE\_CHGRP}
+
+  This message is send to the master daemon to change the group owner
+  of a slave node.  The group to be changed to is checked for validity
+  before sending the message.  The master daemon compares the euid in
+  the request to the uid on the node to see if the change is allowed.
+
+  \begin{reqresp}
+  \rr{TO  }{\pM}
+  \rr{FROM}{\pR}
+  \rr{data.setnode.node}{The node number to modify}
+  \rr{data.setnode.euid}{The euid of the process requesting the change.}
+  \rr{data.setnode.data}{The group ID to change the group ID to.}
+  \response
+  \rr{FROM}{A real process}
+  \rr{TO }{The master daemon}
+  \rr{result}{zero indicates success}
+  \end{reqresp}
+
+\msg{NODE\_CHMOD}
+
+\msg{NODE\_CHOWN}
+
+\msg{NODE\_CHROOT}
+
+  This message requests the slave daemon to perform a \texttt{chroot}
+  call.  The new root directory will affect all processes migrated to
+  the node after the call is completed.
+
+  \begin{reqresp}
+  \rr{TO}{\pS}
+  \rr{FROM}{\pR}
+  \rr{bpr\_string}{path to \texttt{chroot} to.}
+  \response
+  \rr{FROM}{\pR}
+  \rr{TO}{\pS}
+  \rr{result}{result of \texttt{chroot}.  zero indicates success}
+  \end{reqresp}
+
+\msg{NODE\_EOF}
+
+  This message is sent between daemons before closing a connection to
+  indicate a clean shutdown.  None of the fields are used.
+
+\msg{NODE\_FILEREQ\_PFAIL}
+\msg{NODE\_FILEREQ\_POK}
+
+\msg{NODE\_HALT}
+
+\msg{NODE\_INFO}
+
+\msg{NODE\_PING}
+
+  This message is send between daemons periodically to verify that the
+  connection is still up.  Ping messages from the master daemon
+  contain the desired ping timeout.  Slave daemons update their ping
+  timeout based on this value.
+
+  \begin{reqresp}
+  \rr{TO}{\pD}
+  \rr{FROM}{\pD}
+  \rr{result}{pings from master only have ping timeout.}
+  \response
+  \rr{FROM}{\pD}
+  \rr{TO}{\pD}
+  \end{reqresp}
+
+\msg{NODE\_PWROFF}
+
+  \begin{reqresp}
+  \rr{TO}{\pS}
+  \rr{FROM}{\pR}
+  \end{reqresp}
+
+  This message is sent by a process to a slave daemon to request that
+  the slave daemon power off the machine.
+
+\msg{NODE\_RECONNECT}
+
+\msg{NODE\_REBOOT}
+
+
+\msg{NODE\_STATUS}
+
+\msg{NOTIFY}
+
+  This message is emitted by the master daemon when a machine status
+  change occurs.  (i.e. node status change)
+
+  \begin{reqresp}
+  \rr{TO}{\pS}
+  \rr{FROM}{\pM}
+  \noresponse
+  \end{reqresp}
+
+\msg{PARENT\_EXIT}
+
+  The master will send this message to a process running on a remote
+  machine if its parent process exits.  This notifies the remote
+  process that one of the process's process IDs has changed to 1.  The
+  message is sent from the process that exited to the real remote
+  process which was its child.
+
+  \textbf{SPECIAL CASE ROUTING:} The message originates as a message
+  to the master daemon.  The master daemon (which keeps track of
+  parent process IDs) determines which remote processes the message
+  should be delivered to.  The message is from the real parent process
+  which exited.  Even though that process pay have exited on a slave
+  node, the message always originates on the master node.
+
+  \begin{reqresp}
+  \rr{TO}{\pM / \pRs (child process)}
+  \rr{FROM}{\pR (parent process which exited)}
+  \noresponse
+  \end{reqresp}
+
+\msg{PROC\_INFO}
+
+
+\msg{PTRACE}
+
+\msg{SET\_CREDS}
+
+  When a process running a slave node performs an operation which
+  modifies the process credentials, this message is sent to the ghost
+  process to update the credentials on the ghost.  These operations
+  include the \texttt{set*id} system calls and \texttt{execve}.
+
+  \begin{reqresp}
+  \rr{TO}{\pG}
+  \rr{FROM}{\pRs}
+  \rr{bpr\_proc\_creds}{packed process credentials}
+  \noresponse
+  \end{reqresp}
+
+\msg{STOP}
+
+  This message is send to the ghost process when the real process
+  enters the stopped state (T).  The ghost updates its status to
+  reflect the new status.
+
+  \begin{reqresp}
+  \rr{TO}{\pG}
+  \rr{FROM}{\pRs}
+  \noresponse
+  \end{reqresp}
+
+\msg{SYS\_FORK}
+
+   When a process running on a slave node \texttt{fork}s, this message
+   is sent to the ghost process to also perform the same fork.  This
+   keeps both process trees synchronized and also allocates a process
+   ID for the child process on the remote node.
+
+   This message also covers the \texttt{clone} system call.
+
+   \begin{reqresp}
+   \rr{TO}{\pG}
+   \rr{FROM}{\pRs}
+   \rr{bpr\_rsyscall\_arg[0]}{clone flags}
+   \response
+   \rr{TO}{\pRs}
+   \rr{FROM}{\pG}
+   \rr{result}{new process ID of child or error if negative}
+   \end{reqresp}
+
+\msg{SYS\_KILL}
+\msg{SYS\_GETPGID}
+\msg{SYS\_GETSID}
+\msg{SYS\_SETPGID}
+\msg{SYS\_SETSID}
+\msg{WAIT}
+
+   When a process running on a slave succesfully performs a
+   \texttt{wait} on a zombie process, the slave sends a \texttt{WAIT}
+   message to the master to update the process tree there as well.
+   The same \texttt{wait} call is performed by the ghost process.
+
+   \begin{reqresp}
+   \rr{TO                   }{\pG}
+   \rr{FROM                 }{\pRs}
+   \rr{bpr\_rsyscall\_arg[0]}{process ID to wait on}
+   \rr{bpr\_rsyscall\_arg[1]}{\texttt{wait} flags with
+                               \texttt{WNOHANG} masked off}
+   \noresponse
+   \end{reqresp}
+
+\end{description}
+
+
+% Message Name            Resp?   From            To              Short descriptio
+% n
+% --------------------------------------------------------------------------------
+% ----------------------------------------------------
+% BPROC_CONT              N       Real            Ghost           Process continue d
+% BPROC_EXEC              N       Real            Ghost           Notification of task_struct->comm change.
+% BPROC_EXIT              N       Real            Ghost           Process exit with status.
+% BPROC_FWD_SIG           N       Ghost           Real*           Forward a signal
+%  received by the ghost to the remote process.
+%                         N       Real***         Ghost           TO BE IMPLEMENTE
+% D....
+% BPROC_GET_STATUS        Y       Real(M)**       Slave Daemon    Get status of a 
+% remote process.
+% BPROC_GETPGID           Y       Real            Ghost
+% BPROC_GETPPID           Y       Real            Ghost
+% BPROC_GETSID            Y       Real            Ghost
+% BPROC_ISORPHANEDPGRP    Y       Real            Master
+% BPROC_MOVE              Y       Real            Node            Move a process t
+% o a node.
+% BPROC_SET_CREDS         N       Real            Ghost           Process did setu
+% id, getgid, etc. /* Not implemented */
+% BPROC_SETPGID           Y       Real            Ghost
+% BPROC_SETSID            Y       Real            Ghost
+% BPROC_STOP              N       Real            Ghost           Process stopped
+% BPROC_SYS_FORK          Y       Real            Ghost           Have the ghost f
+% ork to allocate a new process ID.
+% BPROC_SYS_KILL          Y       Real            Ghost           Perform a remote
+%  signal delivery.
+% BPROC_SYS_WAIT          Y       Real            Ghost           Perform a wait()
+
+% BPROC_PTRACE            Y       Real(M)         Real            Remote ptrace sy
+% scalls.
+% BPROC_PTRACE_DETACH     N       Real(M)         Real            A silent process
+%  detach.  (used by do_exit)
+
+%\printindex
+%\end{document}

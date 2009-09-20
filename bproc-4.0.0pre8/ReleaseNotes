@@ -1,0 +1,410 @@
+4.0.0pre8 ------------------------------------------------------------------
+  This version has been ported to Linux 2.6.9
+
+  This version is just a port to 2.6.9 which differs from 2.6.8.1
+  significantly.
+
+4.0.0pre7 ------------------------------------------------------------------
+  This version has been ported to Linux 2.6.8.1
+
+  A new feature in this version is support in the slave daemons to
+  find out about and talk to multiple master nodes at once.  This
+  really just means that the slave node will run multiple instances of
+  the slave daemon.  The process spaces from the two masters don't
+  over lap.
+
+  This configured with the 'master' configuration option in the
+  configuration file.  (See 'man bproc_config') In a nutshell, each
+  master line lists an address for a master node.  This list will get
+  sent to the slave.  It will try to connect to any master it's not
+  connected to yet.  A SIGHUP to bpmaster will cause the slaves to
+  retry.  If no 'master' lines are present the slave should function
+  as before although some of the messages will look different.
+
+  As part of this new feature, the slave daemon will optionally setup
+  a private file system name space for each instance of the slave
+  daemon.  If 'slave privatefs yes' is added to the master's
+  configuration file then the slave daemon will create a private file
+  system name space for itself.  This will be automatically unmounted
+  when the slave daemon exits.
+
+
+  Also support has been re-added for ppc and new support for ppc64 has
+  been added.  ppc64 includes mixed mode (32bit/64bit) support.
+
+  There's also the usual batch of bug fixes and enhancements.  See the
+  ChangeLog for details.
+
+4.0.0pre6 ------------------------------------------------------------------
+  This version has been ported to Linux 2.6.7.
+
+  Lots and lots of fixes in this version, especially in the ptrace
+  interface for debuggers.
+
+  See the ChangeLog for details.
+
+4.0.0pre5 ------------------------------------------------------------------
+
+  This revision has been ported to Linux 2.6.6.
+
+  CONFIG_REGPARM and CONFIG_4KSTACKS should both be safe to use now.
+
+  See the ChangeLog for details.
+
+4.0.0pre4 ------------------------------------------------------------------
+
+  The big thing in this release is a port to Linux 2.6.5
+
+  This port is still a work in progress.  It's still rough and there
+  are a lot of things that won't work or won't work quite right.  Some
+  known issues include:
+    - execve hook is currently unimplemented
+    - daemon connection management isn't working quite right.  Ping
+      timeouts and the like are broken right now.
+    - only part of the ptrace interface is implemented.  (it grew by a lot)
+
+  All the hooks are probably not in quite the right places yet.  Most
+  of the time was spent reworking process movement.  Process movement
+  is atomic now from the point of view of other proceses.  This gets
+  rid of a whole lot of confusion and weird flags when a process is
+  involved in moving itself.  The ptrace interface should be a lot
+  more solid as a result.
+
+  So far the port has been done for x86 and AMD64.  The architecture
+  specific bits haven't been done yet for Alpha or PPC.
+
+4.0.0pre2 ------------------------------------------------------------------
+
+  The default configuration directory has been changed from
+  /etc/beowulf to /etc/clustermatic.  There was some desire to rebrand
+  it here since this stuff bears little resemblance to most things
+  which go by the name "beowulf".
+
+4.0.0pre1 ------------------------------------------------------------------
+
+  This release includes some significant changes in the way system
+  configuration is handled.
+
+
+  Node Numbers
+
+    This release adds efficient support for sparse node ranges.  This
+    means that nodes no longer need to be numbered from 0 .. n-1.
+
+    In node configuration, the "nodes XXX" line is no longer required.
+    If it is specified it will be ignored.  The master daemon
+    determines which nodes "exist" by which nodes have IP addresses
+    assigned to them.  For example, in "Pink" the nodes are physically
+    organized into groups of 128 nodes.  We use the following lines to
+    assign UP addresses to the nodes so that they will be numbered
+    1000-1127, 2000-2127 and so on.
+
+        iprange 1000 10.0.1.1 10.0.1.128
+	iprange 2000 10.0.2.1 10.0.2.128
+	iprange 3000 10.0.3.1 10.0.3.128
+	iprange 4000 10.0.4.1 10.0.4.128
+
+	iprange 6000 10.0.6.1 10.0.6.128
+	iprange 7000 10.0.7.1 10.0.7.128
+	iprange 8000 10.0.8.1 10.0.8.128
+	iprange 9000 10.0.9.1 10.0.9.128
+
+
+  Node status
+
+    Node status is now provided to user level apps via a virtual file
+    system interface (called "bpfs") instead of the old mechanism
+    which involved sending messages to the master daemon.  In order to
+    accommodate the VFS, node permission and state information was
+    moved into kernel space.  The VFS is well over two orders of
+    magnitude faster faster than the old interface on a 1024 node
+    machine.  The bigger the cluster, the more this helps.
+
+    The VFS information exists only on the master node.  This means
+    that information about other nodes is no longer available on the
+    slave node.  The VFS may be mounted on the slave node but
+    information will only be available about the slave itself and the
+    master.
+
+    All the node information calls require this VFS to be mounted.  By
+    default it will look for it to be mounted on "/bpfs".
+
+    The VFS is also used (by beoboot) to store misc node information.
+    The get/setxattr syscalls can be used to store information as
+    extended attribues.
+
+    NOTE: The get/setxattr syscalls aren't wired up all architectures
+    in the Linux kernel.  Two new patches are included in the patch
+    directory to address this issue on alpha and x86_64.
+
+  API
+
+    There are significant changes in node status APIs.  This is the
+    real reason this is not another 3.2.x or a 3.3.x release.
+
+    Nodesets:
+
+      Node status gathering functions (e.g. bproc_nodelist) now return
+      a node set.  The nodes in this set will not necessarily be
+      numbered 0 .. n-1.  On large systems, it's very likely that it
+      wont be.
+
+      Functions are provided to create/free/merge these sets.  Also,
+      there is "bproc_nodefilter" which is what bpsh, etc. use to
+      translate node specifications into lists of nodes.
+
+    The nodeset related APIs are likely to remain stable at this point.
+
+
+  Finally AMD x86-64 support has been added!  This doesn't yet support
+  mixed (32 bit/64 bit) operation.  The migration interfaces are only
+  available in 64 bit mode.
+
+3.2.6 ----------------------------------------------------------------------
+
+  Node range handling has changed significantly.  Node ranges are now
+  setup to allow for sparse node ID assignment.
+
+  The "nodes" directive in the configuration file is ignored.  A node
+  will be allocated IF
+
+
+  The kernel patch has been updated in this release.  The provided
+  patch is against Linux 2.4.21.
+
+  The library cache crud is finally disappearing from this release.
+
+  See the change log for details.
+
+3.2.5 ----------------------------------------------------------------------
+
+  This release contains only bug fixes and performance improvements.
+  See the change log for details.
+
+3.2.4 ----------------------------------------------------------------------
+
+  This release adds support for large node counts in bpmaster and
+  bpsh.  It's still a good idea to keep the node range as small as
+  possible since sparsely populated node ranges aren't handled well.
+
+  This release is running on "pink" our new 1024 node cluster at LANL.
+
+  The kernel patch has been updated in this release.  The provided
+  patch is against Linux 2.4.20.
+
+  There's also the usual round of bug fixes.  See the change log for details.
+
+3.2.3 ----------------------------------------------------------------------
+
+  This release contains only bug fixes.  See the change log for details.
+
+3.2.2 ----------------------------------------------------------------------
+
+  This release has a number of important bug fixes.  There are also
+  some build time fixes for gcc 3.2.  vrfork() robustness has also been
+  improved somewhat.
+
+  See the change log for details.
+
+3.2.1 ----------------------------------------------------------------------
+
+ Kernel Patch
+
+  Note that version 3.2.1 updates the kernel patch to fix a few
+  locking issues.  It will be necessary to rebuild your kernels.
+
+ This release is mostly bug fixes.  See the change log for details.
+
+3.2.0 ----------------------------------------------------------------------
+
+ Demand loading of libraries
+
+  The file request stuff has been ifdef'ed so that building it in is
+  optional.  I anticipate removing it as soon as our boot-time
+  environement which doesn't use it becomes stable.  Support for it
+  can be switched on and off with the FILEREQ:= line in Makefile.conf.
+
+  I've been testing with this turned off.  It builds fine with it
+  turned on and I presume it still works.  The file request stuff is
+  essentially untested from here on in.
+
+ vrfork() and vexecmove()
+
+  vrfork() and vexecmove() have been mostly rewritten.  The interface
+  changed a little bit to separate the input (node numbers) and the
+  return values (pids).  They are now more resiliant for failure of
+  individual moves.  The returned array of pids may include negative
+  numbers which are error values.  The return value is now a processes
+  index in the list of children or the total number of nodes
+  (regardless of failure) to the parent.  Hopefully this interface
+  will be stabilizing somewhat.
+
+  There's also the usual round of bug fixes.  See the change log for details.
+
+3.1.10 ---------------------------------------------------------------------
+
+  This release features a much-improved vrfork and a vexecmove.  These two
+  interfaces still need some work in the error cases but they seem pretty
+  stable at this point.  Documentation is still a to-do here.
+
+  There's also the usual round of bug fixes.
+
+3.1.9  ---------------------------------------------------------------------
+
+  This release is just bug fixes.  See the change log for details.
+  The basic infrastructure is surviving a much more harsh stress test
+  than before (ptree.c) so with a little luck this release will be
+  somewhat better than the last few.
+
+More x86 FPU bogosity.
+
+  This release addresses further problems with FPU migration on x86.
+  It turns out that it's possible to load a clean FPU state from a P3
+  on a P1 without taking a trap.  However, math on the P1 after doing
+  that produces incorrect results.  Nice work, Intel.  VMADump now
+  tries to avoid touching an unused FPU during migration.  This fixes
+  the case where an application is started on the front end and
+  immediately migrated to a remote node where it runs to completion.
+  There will still be problems if an application which has used the
+  FPU tries to migrate between FPU architectures.
+
+3.1.8  ---------------------------------------------------------------------
+
+  3.1.6 was a big change which introduced a bunch of bugs.  This
+  release fixes more of them.  See the change log for details.
+
+3.1.7  ---------------------------------------------------------------------
+
+  BProc has been ported to the PowerPC.  It hasn't seen much testing
+  since I don't have a lot in the way of PPC hardware but the first
+  take is there and it seems to work fine.
+
+  Another Linux patch is added to this release to fix a SMP problem in
+  the process ID allocator.  This patch should be applied to the kernel
+  in addition to the BProc patch.
+
+  There's an important bug fix in the master daemon too.
+
+3.1.6  ---------------------------------------------------------------------
+
+Transparent Remote Exec
+
+  This release adds a facility to allow sys_execve on slave nodes to
+  transparently use their ghost to provide a binary image.
+  Essentially, this looks like bproc_rexec(-1, ...) followed by
+  bproc_move(original_slave) except that the process never really
+  leaves the slave and therefore maintains stuff like its current
+  working directory and open files.
+
+  This is a big step in being able to do script-like things on slave
+  nodes.  Shells don't quite work like they do on the front end since
+  it's not possible to walk a path and find a binary before exec()ing
+  it.  Anything with a full path name on the binary works though.
+
+Hot Reconnect for Slaves
+
+  The hot reconnect feature allows slaves to reconnect to the front
+  end without resetting their state.  This is *not* a fail-over
+  feature.  The old connection needs to be shutdown cleanly to avoid
+  loss of messages in flight.  Hot reconnect is intended to allow
+  slaves to switch networks after startup.
+
+Bugs
+
+  There's also the usual round of bug fixes.  See the change log for
+  more info on those.
+
+3.1.5  ---------------------------------------------------------------------
+
+  This release deals with a x86 VMADump problem migrating between
+  machines with different FPU types.  This caused a kernel oops when
+  the process touched the FPU (and caused a restore) on the second
+  machine.  VMADump now does the restore itself and traps exceptions.
+  In the case of an exception, the moving process will lose its FPU
+  state.
+
+  This needs some testing with different combinations of FPU types.  I
+  say this mostly because the Intel documentaiton for frstor and
+  fxrstor doesn't list any exceptions or say anything about what
+  is supposed to happen when restoring bogus data.
+
+  This release also adds a first take on vrfork (vector rfork) which
+  will make creation of large numbers of processes in a cluster more
+  efficient.  vrfork uses a tree based scheme to distribute the
+  process image while creating a flat process tree.
+
+3.1.4 ---------------------------------------------------------------------
+
+  Lots more bugfixes here.  Most of them come from seeing problems
+  running under high load (i.e. 10000+ processes).  There couple of
+  minor new features and changes as well.  See the change log for
+  details.
+
+3.1.3 ---------------------------------------------------------------------
+
+  This release is mostly just bug fixes.  See the change log for details.
+
+3.1.2 ---------------------------------------------------------------------
+
+Node Addresses
+
+  Node connection management has changed significantly to allow for
+  slave nodes to re-connect to the master daemon without losing their
+  state, interrupting moves in progress, etc.  Hopefully, this will be
+  useful for both dealing with some network problems and run-time
+  network selection.  (i.e. boot on fast ethernet, switch to exotic
+  network once it's configured from the front end.)
+
+Magic Dynamic Linker
+
+  The interface to the IO forwarding infrastructure has changed
+  significantly.  It's now much more flexible than before.  The old
+  dynamic linker hack will no longer work without modification.  This
+  modification has *NOT* been made in the included patch.
+
+3.1.1 ---------------------------------------------------------------------
+
+The only changes between this release and 3.1.0 are updated Linux kernel
+patch files.  This update is only required for x86.  The Linux 2.4.10
+patch file broke PTRACE_SINGLESTEP on x86.  This in turn broke gdb even
+when not using BProc.
+
+3.1.0 ---------------------------------------------------------------------
+
+Configuration:
+
+  The "nodes" directive is now REQUIRED to set the machine size.  With
+  multiple IPs per node, things got too confusing without it.
+
+
+
+The Magic Linker (as used by bpsh and glibc):
+
+  The magic linker mechanism is changed in this revision.  A patch for
+  the old mechanism and support within bpsh still exists but will be
+  removed when support for the new mechanism exists in other boot
+  support code.  Old magic elf linker support is now OFF by default in
+  bproc/clients/Makefile.  To turn it on, add -DMAGIC_ELF_LINKER to
+  the CFLAGS line.
+
+  The old magic linker patch is called: glibc-2.2.3-bproc.patch
+  The new magic linker patch is called: glibc-2.2.3-bproc-fr.patch
+
+  Although I haven't tried it, I suspect these two can co-exist.
+
+
+
+#! style scripts (shell, perl, etc)
+
+  This release adds preliminary support for these types of executables
+  in execmove.  It does this by placing the shell script in the
+  process's memory space and moving it along with the interpreter
+  process.  On the remote machine the shell script the interpreter is
+  given /proc/self/3 as the script name.  This is setup on the remote
+  end as a magic file descriptor which references the process's own
+  memory space.  The only external thing it depends on is that procfs
+  is mounted on /proc.  This is certainly a hack but maybe a useful
+  one.
+
+  Enjoy,
+  Erik

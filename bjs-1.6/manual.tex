@@ -1,0 +1,471 @@
+% $Id: manual.tex,v 1.4 2003/10/23 22:38:04 mkdist Exp $
+\documentclass[oneside]{book}
+\usepackage{makeidx}
+\usepackage{epsfig}
+
+\sloppypar
+\widowpenalty=10000
+
+\makeindex
+
+\parindent0in
+\parskip.2in
+
+\setlength{\textwidth}{6in}
+\setlength{\oddsidemargin}{.25in}
+\setlength{\evensidemargin}{.25in}
+\setlength{\textheight}{8in}
+
+\begin{document}
+\title{BJS User Reference}
+\author{Erik Hendriks \texttt{<hendriks@lanl.gov>}}
+
+\maketitle
+
+\tableofcontents
+
+\part{User manual}
+\chapter{Overview}
+
+This manual documents the BProc Job Scheduler (BJS).  BJS is a
+scalable cluster job scheduler designed for clusters running the BProc
+single system image software.  Unlike existing systems, BJS does not
+communicate directly with individual cluster nodes, which could soon
+number in the thousands.  Rather it leverages the facilities provided
+by the operating system (Linux with BProc) such as system state and
+the ability to change a node's owner.  As a result, it that can
+cleanly survive cluster failures and schedule jobs around them.
+
+BJS uses the the permission control and remote process control
+facilities but it does not create new processes on nodes in the
+system.  When BJS starts a new job for a user, it only runs a command
+on the front end machine.  A list of nodes which are allocated to that
+job is placed in the process's environment.  It is then up to that
+command (which is supplied by the user) to use those remote nodes.
+For example, a user might submit \texttt{mpirun} to BJS as the command
+to execute.  \texttt{mpirun} is then responsible for creating the
+remote processes.  BProc's remote process creation mechanisms make
+\texttt{mpirun}'s job relatively simple.  BJS detects job completion
+by waiting for the child process it created to exit.
+
+%--- this is actually too simplistic for future use.
+If BJS needs to kill a running job, BJS simply asks the operating
+system which processes are running on which nodes and kills the
+processes running on the nodes allocated to the job via the normal
+UNIX \texttt{kill} system call.
+
+All these operations are accomplished without any direct interaction
+with the nodes in the system.  This allows BJS to run as a
+\emph{single process on the cluster front end}.  This makes BJS unique
+in the realm of schedulers for commodity clusters.  Being a single
+process also drastically simplifies BJS's design.  For example, since
+BJS is a single process, it is very easy for it to tolerate node
+failures.  When a node comes up or goes down (either expectedly or
+unexpectedly) all BJS has to do is update its internal state to
+reflect the availability of the new node.  BJS does not have to worry
+about establishing or losing contact with the node.  BJS is
+automatically notified by BProc when a node comes up or goes down.
+
+\chapter{Using BJS}  %------------------------------------------------
+
+\section{Running jobs}
+
+Users gain access to nodes in the cluster by submitting jobs to BJS.
+To BJS, a job is simply a command to be run.  When the time comes to
+run the job, BJS will execute the command \emph{on the cluster front
+end.}  It is then the the responsibility of the command to create
+processes on remote nodes in the cluster.  The nodes which have been
+allocated to BJS will be placed in the environment variables called
+\texttt{NODES}.  It is currently a comma delimited list of node
+numbers allocated to the job.
+
+For example, a user might submit \texttt{mpirun} to BJS.  Once run,
+\texttt{mpirun} would lookat the \texttt{NODES} enviroment variable to
+get a list of nodes to create processes on.  Then \texttt{mpirun}
+would use BProc's process creation mechanisms to create those
+processes.
+
+There are two modes to run jobs in: interactive and batch mode.  In
+batch mode, the command is submitted to BJS.  BJS then starts the
+command on behalf of the user.  Job output (messages printed to
+standard out and standard error) can be sent to a user specified file
+or discarded.
+
+In interactive mode, the submission program (\texttt{bjssub}) will
+wait for nodes to be allocated and then start the job itself.  This
+allows the job to use the standard in, out and error that the
+submission program has.  Since this is usually a terminal, this has
+the effect of allowing a user to interact with a job.
+
+When submitting a job, the user must select a pool to submit the job
+to.
+
+
+
+When BJS or \texttt{bjssub} runs the command, it is passed to the
+user's shell.  (i.e. \texttt{\$SHELL -c "}\emph{command}\texttt{"})
+This means that shell redirects (\texttt{<}, \texttt{>}, etc.) will
+work and so will pipe lines.
+
+When batch jobs are started, BJS will attempt to chdir to the
+directory where the submission program was run.  It is up to the
+submission program to determine what that directory is.  This can be
+difficult if certain auto-mounters are in use.  See \ref{bjssub} for
+details on a job's current working directory.
+
+\section{Controlling Jobs}
+
+
+
+
+
+\begin{figure}
+\begin{center}
+\begin{verbatim}
+Pool: default   Nodes (total/up/free): 6/3/0
+ID      User     Command                        Requirements                  
+   38 R hendriks mpirun --np 1 foo                 nodes=1 secs=25
+   39 R hendriks mpirun --np 2 bar                 nodes=2 secs=25
+   40   hendriks mpirun --np 2 baz                 nodes=2 secs=25
+\end{verbatim}
+\caption{Sample \texttt{bjsstat} output.}
+\label{fig:bjsstat}
+\end{center}
+\end{figure}
+
+The bjsstat program shows job status.  
+
+
+
+BJS status can be viewed with bjsstat
+
+
+Removing a job which is running will kill the job.
+
+
+\chapter{Policies}  %-------------------------------------------------
+
+BJS policies are implemented as loadable modules.  This allows bjs
+policies to be easily swapped in and out and changed.
+
+\section{Policy: simple}
+The simple policy is the simplest queue policy available.  Jobs are
+run in the order they are submitted.  Time limits are enforced.  No
+more than one job is ever scheduled on a node.
+
+The simple policy doesn't have any additional configuration options.
+
+\section{Policy: shared}
+
+The shared policy is intended to allow BJS to manage (and hopefully
+load balance a little bit) a pool of nodes for interactive use.  When
+a user requests nodes, it will allocate nodes starting with the nodes
+with the smallest number of jobs on them.  Since it will schedule any
+number of jobs on a node, there is never any wait for scheduling.
+Shared does \emph{not} enforce any time limits.
+
+The shared policy doesn't have any additional configuration options.
+
+
+\chapter{Configuration Reference}  %----------------------------------
+
+By default BJS will read its configuration file from
+\texttt{/etc/clustermatic/bjs.conf}.
+
+The BJS configuration file is plain text file with shell style
+comments which begin with \# and continue to the end of the line.
+Blank lines are ignored.  Configuration directives begin with some key
+word (for example ``pool'') and are followed by some number of
+arguments on the same line.
+
+Currently, there is no provision for continuing long lines with \\ but
+it is possible to use most directives more than once if the line gets
+too long.
+
+BJS configuration options fall into two categories.  Global
+configuration options and pool specific options.  Global configuration
+options may appear anywhere in the file.  Pool specific options must
+appear after a \texttt{pool} statement.
+
+Policy modules may require have more pool specific configuration
+options than the ones listed here.  See the policy documentation for
+more information those options.
+
+\section{Configuration Directives}
+
+\begin{description}
+
+\item{\texttt{acctlog} \emph{path}}\\
+\index{\texttt{acctlog}}
+If \texttt{acctlog} isn't specified, no accounting information is
+logged.
+
+\item{\texttt{groups} \emph{groupnames ...}}\\
+\index{\texttt{groups}}
+This option is a pool configuration option.
+
+By default there is no restriction on which groups are permited to
+submit jobs to a pool.  If the groups directive is used, only the
+members of the groups listed will be permitted to submit jobs to the
+pool.
+
+\item{\texttt{minnodes} \emph{number}}\\
+\index{\texttt{minnodes}}
+This option is a pool configuration option.
+
+This option specifies the minimum number of nodes that jobs submitted
+to a pool may request.
+
+\item{\texttt{minsecs} \emph{number}}\\
+\index{\texttt{minsecs}}
+This option is a pool configuration option.
+
+This option specifies the minimum number of seconds that jobs submitted
+to a pool may request.
+
+\item{\texttt{maxnodes} \emph{number}}\\
+\index{\texttt{maxnodes}}
+This option is a pool configuration option.
+
+This option specifies the maximum number of nodes that jobs submitted
+to a pool may request.
+
+\item{\texttt{maxsecs} \emph{number}}\\
+\index{\texttt{maxsecs}}
+This option is a pool configuration option.
+
+This option specifies the maximum number of seconds that jobs submitted
+to a pool may request.
+
+\item{\texttt{nodes} \emph{nodes ...}}\\
+\index{\texttt{nodes}}
+This option is a pool configuration option.
+
+This option specifices which nodes belong to a pool.  The argument can
+be node numbers (e.g. 4) or node ranges (e.g. 10-15) separated by
+commas or spaces.
+
+In general, multiple pools should not share the same nodes.
+
+\item{\texttt{policy} \emph{name}}\\
+\index{\texttt{policy}}
+This option is a pool configuration option.
+
+The policy directive controls which policy is applied to a pool.  Only
+one policy can be loaded on a pool.  BJS will attempty to load
+\emph{policydir}\texttt{/}\emph{name}\texttt{.so}.
+
+\item{\texttt{policydir} \emph{directory}}
+\index{\texttt{policydir}}
+
+This option tells BJS what directory to look in for loadable policy
+modules.
+
+The default is \texttt{/usr/lib/bjs}.
+
+\item{\texttt{pool} \emph{name}}
+\index{\texttt{pool}}
+
+\texttt{pool} starts a new job pool named \emph{name}.
+
+\item{\texttt{socketpath} \emph{path}}
+\index{\texttt{socketpath}}
+
+This option tells BJS where to bind its unix domain socket.  This
+socket it used to communicate with client programs such as bjssub and
+bjsstat.
+
+The default is \texttt{/tmp/.bjs}.
+
+\item{\texttt{spooldir} \emph{directory}}
+\index{\texttt{spooldir}}
+
+This option controls where BJS writes its spool files.
+
+The default is \texttt{/var/spool/bjs}.
+
+\item{\texttt{users} \emph{usernames ... }}
+\index{\texttt{users}}
+This option is a pool configuration option.
+
+By default there is no restriction on which users are permited to
+submit jobs to a pool.  If the users directive is used, only the users
+listed will be permitted to submit jobs to the pool.
+\end{description}
+
+
+
+\chapter{Program reference}  %----------------------------------------
+
+\section{\texttt{bjs}}
+\index{\texttt{bjs} (daemon)}
+
+bjs is the scheduler daemon.  It will fork into the background once
+basic startup is successful.  The system log is used for error
+reporting.
+
+\begin{description}
+\item{-h, --help}\\
+  Display online help and exit.
+
+\item{-V, --version}\\
+  Display version information and exit.
+
+\item{-C \textit{conf}}\\
+  Read BJS configuration from \textit{conf}.  The default
+  configuration file is \texttt{/etc/clustermatic/bjs.conf}.
+\end{description}
+
+
+\section{\texttt{bjssub}}
+\index{\texttt{bjssub}}
+\label{bjssub}
+
+bjssub is the command used to submit a job to bjs.  bjssub has to
+basic modes of operation: batch mode and interactive mode.  In batch
+mode, a job is submitted to the scheduler and bjssub returns as soon
+as submission is complete.  The scheduler will handle starting the job
+when resources are available.  Job output can be redirected to a file
+with -O or it will be sent to \texttt{/dev/null}.
+
+In interactive mode, bjssub will handle running the job.  bjssub will
+wait for the scheduler to return a set of nodes to use and then bjssub
+will start the job.
+
+\texttt{bjssub} will try to determine the current working directory
+first by looking at the \texttt{PWD} environment variable.  If
+\texttt{PWD} isn't present, it will try to call \texttt{getcwd}.  If
+that fails, it will fall back to /.  If current working directory
+problems persist, a current working directory can be specified with
+``-d''.
+
+bjssub [options] command ...
+
+\begin{description}
+
+\item{-h, --help}\\
+  Display online help and exit.
+
+\item{-V, --version}\\
+  Display version information and exit.
+
+\item{-p \textit{poolname}, --pool \textit{poolname}}\\
+  The -p option specifices which pool a job should be submitted to.
+  If this selects which pool the job will be submitted to.  The
+  default pool is ``default''.
+
+\item{-i, --interactive}\\
+  Run the job in interactive mode.  In interactive mode, bjssub will
+  block until the required nodes are ready.  Once the scheduler
+  returns the set of nodes to use, bjssub will run the command itself.
+  Job input and output will go to the user's terminal.
+
+\item{-b, --batch}\\
+  Run the job in batch mode.  In batch mode, the job will be submitted
+  to a pool and bjssub will exit as soon as the submit is complete.
+  The scheduler will start the job itself when resources become
+  available.
+
+  This is the default mode of operation.
+
+\item{-n \textit{number}, --nodes \textit{number}}\\
+  Specify the number of nodes required to run the job.
+
+  Note that this is a job requirement which may be ignored by the
+  policy module.
+
+\item{-s \textit{number}, --seconds \textit{number}}\\
+  Specify the number of seconds required to run the job.
+
+  Note that this is a job requirement which may be ignored by the
+  policy module.
+
+\item{-r, --restartable}\\
+  This flags a job as restartable.  This determines whether a job will
+  be restarted in the event that the job is killed by something like a
+  system crash.
+
+\item{-D \textit{dir}, --directory \textit{dir}}\\
+  For batch jobs, -D may be used to specify a working directory for
+  the command.
+
+\item{-O \textit{file}, --output \textit{file}}\\
+  For batch mode jobs, -O can be used to redirect job output to a file.
+
+\item{--socket \textit{path}}\\
+  bjssub communicates with BJS using a UNIX domain socket.  By default
+  the path of this socket is \texttt{/tmp/.bjs}.  This option can be
+  used to specify a different socket path.
+
+\end{description}
+
+
+\section{\texttt{bjsstat}}
+\index{\texttt{bjsstat}}
+
+\texttt{bjsstat} displays BJS pool and job information.
+
+\texttt{bjsstat} \emph{options ...}
+\begin{description}
+\item{-h, --help}\\
+  Display online help and exit.
+
+\item{-V, --version}\\
+  Display version information and exit.
+
+\item{-U, --update}\\
+
+  bjsstat normally displays BJS pool and job information and then
+  exits.  If -U is specified, bjsstat will stay connected to the
+  scheduler and print updated pool and job information whenever
+  scheduler status changes.  (i.e. when a job changes status, is run,
+  is removed, etc)
+
+\item{--socket \textit{path}}\\
+  bjssub communicates with BJS using a UNIX domain socket.  By default
+  the path of this socket is \texttt{/tmp/.bjs}.  This option can be
+  used to specify a different socket path.
+\end{description}
+
+\section{\texttt{bjsctl}}
+\index{\texttt{bjsctl}}
+
+bjsctl is the BJS control program.  It is used to removed jobs from
+bjs.  If a job is running when it's removed, it will be killed and
+removed.
+
+\begin{description}
+
+\item{-h, --help}\\
+  Display online help and exit.
+
+\item{-V, --version}\\
+  Display version information and exit.
+
+\item{-r, --remove}\\
+  bjsctl should remove jobs.  Job IDs follow on the command line.
+
+\item{--socket \textit{path}}\\
+  bjsctl communicates with BJS using a UNIX domain socket.  By default
+  the path of this socket is \texttt{/tmp/.bjs}.  This option can be
+  used to specify a different socket path.
+\end{description}
+
+
+
+
+\part{Policy API}
+
+BJS policy modules are implemented as ELF shared libraries which are
+dynamicly loaded by BJS when pools are configured.  The intention is
+to allow BJS users write their own more featureful policy modules.
+
+The policy module API is still in its infancy likely still change
+substantially in future revisions of BJS.
+
+
+Note to self: write policy API documentation.  *grin*
+
+
+\printindex
+\end{document}

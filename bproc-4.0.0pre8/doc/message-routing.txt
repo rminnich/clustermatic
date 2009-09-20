@@ -1,0 +1,179 @@
+This document describes message routing in BProc.
+Erik Hendriks <erik@hendriks.cx>
+
+The goal here is to create a very simple router.  Earlier versions of
+the BProc message routers (the master and slave daemons and to a
+lesser extent the char device code in the kernel) were huge
+complicated case statements.  Adding a new message type to the system
+required updating in 6 or more places even though only two places
+really want to know about the message type at all.
+
+To accomplish this goal, we will try to improve the request header so
+that the routing pieces can get the information they need without
+having to know anything about what the payload of the message is.
+(Part of this improvement will be the addition of generic
+source/destination information.)
+
+Rules:
+
+  * Ghosts cannot emit messages which require responses.
+  * Ghosts only emit messags which are for their corresponding real process.
+  * Ghosts can only receive requests from their real process.
+
+  (Ghosts can only talk to their real processes.)
+
+  * Real processes cannot be the destination of any messages.  This is
+    because they are normal processes.  They are not prepared to
+    handle a request from anywhere.
+
+  * Ghosts all exist on the master node.
+
+  * Real processes may exist either on the master node or a slave node.
+
+  * No process has more than one outstanding request at a time.
+    exception: GET_STATUS but responses to this are not handled via
+    the usual mechanisms.
+
+
+Terminology:
+
+  Real process: In BProc there is a ghost and real process.  The real
+                 process is the one where the computation actually
+                 happens.  The ghost is a place holder in the process
+                 table on the front end which represents the remote
+                 process and does some work on its behalf.
+
+  Ghost process: This is the place holder process on the front end.
+
+
+  Request: A message to a remote entity which requires a response.
+                 The requester will usually block in the (D) state
+                 while waiting for the response.
+
+  Notification:  A message which has no response.
+
+
+Message Name		Resp?	From		To		Short description
+------------------------------------------------------------------------------------------------------------------------------------
+BPROC_CONT		N	Real		Ghost		Process continued
+BPROC_EXEC		N	Real		Ghost		Notification of task_struct->comm change.
+BPROC_EXIT		N	Real		Ghost		Process exit with status.
+BPROC_FWD_SIG		N	Ghost		Real*		Forward a signal received by the ghost to the remote process.
+			N	Real***		Ghost		TO BE IMPLEMENTED....
+BPROC_GET_STATUS	Y	Real(M)**	Slave Daemon	Get status of a remote process.
+BPROC_GETPGID		Y	Real		Ghost
+BPROC_GETPPID		Y	Real		Ghost
+BPROC_GETSID		Y	Real		Ghost
+BPROC_ISORPHANEDPGRP	Y	Real		Master
+BPROC_MOVE		Y	Real		Node		Move a process to a node.
+BPROC_SET_CREDS		N	Real		Ghost		Process did setuid, getgid, etc. /* Not implemented */
+BPROC_SETPGID		Y	Real		Ghost
+BPROC_SETSID		Y	Real		Ghost
+BPROC_STOP		N	Real		Ghost		Process stopped
+BPROC_SYS_FORK		Y	Real		Ghost		Have the ghost fork to allocate a new process ID.
+BPROC_SYS_KILL		Y	Real		Ghost		Perform a remote signal delivery.
+BPROC_SYS_WAIT		Y	Real		Ghost		Perform a wait()
+
+BPROC_PTRACE		Y	Real(M)		Real		Remote ptrace syscalls.
+BPROC_PTRACE_DETACH	N	Real(M)		Real		A silent process detach.  (used by do_exit)
+
+Key:      What:                         Type
+Real(M) - Real process on front end     pid
+Real    - Real process on slave node	pid
+Ghost   - Ghost process			pid
+Master	- Master node			nodenum
+Slave   - Slave  node			nodenum
+
+Interaction Types:
+Real  -> Ghost
+Ghost -> Real
+Real  -> Ghost -> Real
+Real  -> Node  -> Real
+Real  -> Real2 -> Real
+
+Note that messages which are directed to a real process are always
+handled by one of the daemons on behalf of that process.  For example,
+a slave daemon will send a signal to the process that a FWD_SIG
+message is directed.
+
+ (intermediate nodes need to have enough information to formulate error messages)
+
+* FWD_SIG forwards a signal that has been received by the ghost
+  process.  This message is directed to a particular PID.  Since real
+  processes cannot receive messages, this message is actually handled
+  by the slave daemon on the node where the process exists.
+
+** GET_STATUS requests get generated when a process accesses the /proc
+   file system on the front end node.  (Ordinary programs like ps()
+   will generate these.)  Like FWD_SIG, these are directed to a
+   particular PID but are actually handled on the slave daemon where
+   the real process for that PID exists.
+
+*** In the case of remote syscalls, the real process may deflect a
+    signal to the ghost process.
+
+----------------------
+Routing Implementation
+----------------------
+
+The "from" field is unecessary for the most part.  All the normal
+message exchanges happen OK without them.  There are a few execptions  ISORPHANEDPGRP.
+
+OTOH...  all exchanges should know exactly where the response is going
+back to and it should be possible to tag them.  (Maybe get rid of this
+wacky ID system?)
+
+For messages to nodes, the PID information is usually unecessary on
+the return trip because of the mechanism that matches up responses by
+response ID.  (i.e.  just flinging the message down the right pipe
+from the master will work ok.  Heck, it has up until now.)
+
+  
+
+Routing fields:
+fromtype - data type for the from field (node, pid(real) or pid(ghost))
+totype   - data type for the from field (node, pid(real) or pid(ghost))
+from     - message source... needed for replies (sometimes) and error messages.
+to       - message destination.
+
+
+Routing rule for the master node
+--------------------------------
+If message is handled directly,
+   handle message
+
+switch(totype) {
+case BPROC_ROUTE_TO_NODE:
+     if node == -1
+         forward to kernel
+     else
+         send to that node
+case BPROC_ROUTE_TO_REAL:
+     l = location of real process
+     if l == -1
+         forward to kernel
+     else
+         send to node l
+case BPROC_ROUTE_TO_GHOST:
+     forward to kernel
+default:
+     bitch 'n' moan
+}
+
+
+Most of the routing discussion is for the master node.  Slave nodes
+are more like simple message pipes for network<->kernel.
+
+Routing for the slave node
+--------------------------
+If message is from master:
+   if handle directly:
+       do it
+   else:
+       forward to kernel
+
+If message is from kernel
+   if handle directly
+       do it
+   else:
+       forward to master

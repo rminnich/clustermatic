@@ -1,0 +1,292 @@
+#!/bin/sh
+#
+# chkconfig: 345 72 28
+# description: Starts up Clustermatic
+# config: /etc/clustermatic/config
+#
+### BEGIN INIT INFO
+# Provides: clustermatic
+# Required-Start: $network
+# Required-Stop: $network
+# Default-Start: 3 5
+# Default-Stop: 0 1 2 4 6
+# Description: Clustermatic
+### END INIT INFO
+#
+# $Id: rc.clustermatic,v 1.12 2004/08/19 21:06:17 mkdist Exp $
+
+# we require the /etc/clustermatic/config file
+CONFIG=/etc/clustermatic/config
+[ -f $CONFIG ] || exit 0
+
+#---------------------------------------------------------------------
+# Load startup function library with compatibility crap for RH and SuSE...
+if [ -f /etc/rc.d/init.d/functions ] ; then
+    . /etc/rc.d/init.d/functions
+    Xdaemon() {
+	daemon $*
+	echo
+    }
+    Xkillproc() {
+	killproc $*
+    }
+    Xfailure() {
+	failure ""
+	echo
+    }
+    Xsuccess() {
+	success ""
+	echo
+    }
+    Xstatus() {
+	status $*
+    }
+elif [ -f /etc/rc.status ] ; then
+    . /etc/rc.status
+    Xdaemon() {
+	startproc $*
+	rc_status -v
+    }
+    Xkillproc() {
+	killproc $*
+    }
+    Xfailure() {
+	rc_failed 1
+	rc_status -v
+    }
+    Xsuccess() {
+	[ 0 ]
+	rc_status -v
+    }
+    Xstatus() {
+	echo -n "$*:"
+	checkproc $*
+	rc_status -v
+    }
+else
+    echo >&2 "I know how to run on this machine..."
+fi
+#---------------------------------------------------------------------
+
+# Usage: beoconfig tag [config_file]
+beoconfig() {
+    local FILE=$2
+    if [ -z "$FILE" ] ; then FILE=${CONFIG} ; fi
+    if [ ! -f ${FILE} ] ; then
+        echo "Warning: ${FILE} file not found." >&2
+	return
+    fi
+    # These sed bits:
+    #  - strip spaces
+    #  - strip leading + trailing space
+    #  - if line starts with $1, strip off $1 and print it.
+    sed -ne "s/#.*//" < ${FILE} \
+	 -e "s/^[[:space:]]\+//;s/[[:space:]]\+\$//" \
+         -e "/^$1[[:space:]]/{s/^$1[[:space:]]\+//;p;}"
+}
+
+get_real_file() {
+    # This is a questionable hack which uses the kernel to follow the
+    # symlinks to find the real file behind $1.  Then we use ls to
+    # read the symlink since not every system has 'readlink'.
+    LANG= ls -l /proc/self/fd/3 3< "$1" | sed -e 's/.*-> //'
+}
+
+liblist_from_binary() {
+    if [ ! -x $1 ] ; then return 0; fi
+
+    LIST=`ldd $1 | sed -ne '/ => /{;s/.*=> //;s/ (.*)$//;p;}'`
+    for LIBS in $LIST ; do
+	FILE=`get_real_file "$LIBS"`
+	if [ -n "$FILE" ] ; then
+	    if ! bplib -a "$FILE" ; then
+		return 1
+	    fi
+	fi
+    done
+    return 0
+}
+
+
+liblist_load() {
+    if ! bplib -c ; then return 1; fi
+
+    LIBLIST=`beoconfig libraries`
+    for lib in $LIBLIST; do
+	if ! find $lib -type f -maxdepth 1 -name \*.so\* 2>/dev/null|\
+	    bplib -a - ; then
+	    return 1
+	fi
+    done
+    BINLIBS=`beoconfig librariesfrombinary`
+    for BIN in $BINLIBS; do
+	if ! liblist_from_binary $BIN ; then
+	    return 1;
+	fi
+    done
+    return 0
+}
+
+
+
+PATH=/sbin:/usr/sbin:$PATH
+# See how we were called.
+case "$1" in
+  start)
+	echo "Starting Clustermatic..."
+	echo -n "    Loading modules:"
+	if modprobe bproc ; then
+	    Xsuccess
+	else
+	    Xfailure
+	    exit 1
+	fi
+
+	# Configure network interfaces according to our config file.
+	# NOTE: This whole network configuration mess is deprecated
+	# and will be removed.
+	beoconfig interface | while read IF ADDR NMSK ; do
+	    if [ -z "$IF" ] ; then
+		echo >&2 "Error: Interface name is missing."
+		exit 1
+	    fi
+	    if [ -n "$ADDR" ] ; then
+		echo -n "    Configuring network interface ($IF):"
+		if [ -z "$NMSK" ] ; then
+		    echo >&2 "Error: No netmask given for interface."
+		    exit 1
+		fi
+		# A generic ipcalc type thing
+		BCAST=`echo $ADDR $NMSK | awk '
+                       function octstonum(octs,     a)
+                       {
+                           split(octs, a, /\./);
+                           return  ((a[1]*0x100 + a[2])*0x100 + a[3])*0x100 + a[4];
+                       }
+                       { 
+                           bcast = or(octstonum($1), xor(octstonum($2), 0xffffffff));
+                           printf ("%d.%d.%d.%d",
+                                   rshift(and(bcast, 0xff000000), 24),
+                                   rshift(and(bcast, 0x00ff0000), 16),
+                                   rshift(and(bcast, 0x0000ff00), 8),
+                                   and(bcast, 0x000000ff));
+                       }
+                       '`
+		if ifconfig $IF $ADDR netmask $NMSK broadcast $BCAST; then
+		    Xsuccess
+		else
+		    Xfailure
+		    exit 1
+		fi
+		if [ -z "$BITCHED" ] ; then
+		    cat <<EOF
+      NOTE: Using clustermatic configuration to setup network interfaces is
+      deprecated.  Please use the system's own mechanism to configure the
+      interface and remove the address and netmask from the interface lines
+      in $CONFIG.
+EOF
+		    BITCHED=1
+		fi
+	    fi
+	done || exit 1
+
+	echo -n "    Setting up libraries: "
+	if liblist_load ; then
+	    Xsuccess
+	else
+	    Xfailure
+	    exit 1
+	fi
+	if [ "`bplib -l`" = "" ] ; then
+	    echo >&2 "WARNING: The library list is empty."
+	fi
+
+	# Try to avoid mounting again....
+	echo -n "    Mounting bpfs:"
+	if grep -q '/bpfs bpfs' /proc/mounts ; then
+	    echo -n "  (already mounted)"
+	    Xsuccess
+	else
+	    mount -t bpfs none /bpfs && Xsuccess || Xfailure
+	fi
+	echo -n "    Starting bpmaster: "
+	Xdaemon /usr/sbin/bpmaster
+	echo -n "    Starting beoserv: "
+	Xdaemon /usr/sbin/beoserv
+	touch /var/lock/subsys/beoserv
+	;;
+  stop)
+        ibjs=/etc/init.d/bjs
+        if [ -x $ibjs ] && $ibjs status | grep -q running ; then
+	    $ibjs stop
+	fi
+	echo "Stopping Clustermatic..."
+	echo -n "    Shutting down beoserv: "
+	Xkillproc beoserv
+	Xsuccess
+	echo -n "    Shutting down bpmaster:"
+	Xkillproc bpmaster
+	Xsuccess
+	echo -n "    Unmounting bpfs:"
+	if grep -q ' /bpfs ' /proc/mounts ; then
+	    umount /bpfs 2>/dev/null && Xsuccess || Xfailure
+	else
+	    Xsuccess
+        fi
+	echo -n "    Clearing library lists:"
+	if [ "`bplib -l 2>/dev/null`" = "" ] ; then
+	    Xsuccess
+        else
+	    bplib -c 2>/dev/null && Xsuccess || Xfailure
+	fi
+	echo -n "    Removing modules:"
+	if lsmod | grep -q ^bproc ; then
+	    rmmod bproc && rmmod vmadump && Xsuccess || Xfailure
+	else
+	    Xsuccess
+	fi
+	rm -f /var/lock/subsys/beoserv
+	;;
+  status)
+	Xstatus beoserv
+	Xstatus bpmaster
+	;;
+  restart)
+	ibjs=/etc/init.d/bjs
+	bjsstatus=
+	if [ -x $ibjs ] && $ibjs status | grep -q running ; then
+	    bjsstatus=run
+	fi
+	$0 stop
+	$0 start
+	[ "$bjsstatus" = run ] && $ibjs start
+	;;
+  reload)
+	$0 reloadlibs
+	echo -n "Rereading daemon configuration:"
+	killall -HUP beoserv && killall -HUP bpmaster && Xsuccess || Xfailure
+	;;
+  reloadlibs)
+	PRELIBS=`bplib -l | sort`
+	echo -n "Reloading library list:"
+	if liblist_load ; then
+	    Xsuccess
+	else
+	    Xfailure
+	    exit 1
+	fi
+	if [ "`bplib -l`" = "" ] ; then
+	    echo >&2 "WARNING: The library list is empty."
+	fi
+	POSTLIBS=`bplib -l | sort`
+	if [ "$PRELIBS" != "$POSTLIBS" ] ; then
+	    echo "Library list has changed.  Don't forget to reload nodes."
+	fi
+	;;
+  *)
+	echo "Usage: clustermatic {start|stop|status|restart|reload|reloadlibs}"
+	exit 1
+esac
+
+exit 0
+

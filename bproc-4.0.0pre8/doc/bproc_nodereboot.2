@@ -1,0 +1,49 @@
+.\" $Id: bproc_nodereboot.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODEREBOOT 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodereboot  \- ask a slave daemon to reboot the machine
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodereboot\fR(int \fInode\fR);
+
+int \fBbproc_nodereboot_async\fR(int \fInode\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_nodereboot\fR asks a slave daemon to reboot
+itself.  \fBbproc_nodereboot\fR will wait for a response from the
+slave node before returning.  \fBbproc_nodereboot_async\fR is
+identical except that it will return immediately.
+
+.SH RETURN VALUE
+.PP
+On  success,  zero  is returned.  On error, \-1 is returned
+and errno is set appropriately.
+
+.SH ERRORS
+.PP
+.TP
+\fBEPERM\fR
+The calling process does not have permission to
+move to node.  You must be the superuser to use
+\fBbproc_nodereboot\fR.
+
+.TP
+\fBEINVAL\fR
+\fInode\fR is an invalid node number or
+\fInode\fR is down. 
+
+.TP
+\fBEBUSY\fR
+The BProc system is not running.
+.PP
+
+
+.SH SEE ALSO
+.PP
+
+\fBbproc_nodehalt\fR(2)
+\fBbproc_nodepwroff\fR(2)
+

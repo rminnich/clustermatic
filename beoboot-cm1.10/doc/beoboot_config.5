@@ -1,0 +1,215 @@
+.TH BEOBOOT_CONFIG 5 "" "Beoboot cm1.10" "Beoboot Administrator's Manual"
+.SH NAME
+config \- the BProc/Beoboot master configuration file
+
+config\.boot \- the beoboot slave node configuration file
+
+.SH SYNOPSIS
+/etc/clustermatic/config
+
+/etc/clustermatic/config.boot
+
+.SH DESCRIPTION
+beoserv and the BProc master daemon read their configuration
+information from /etc/clustermatic/config.  This file is a plain
+text file.  All configuration directives are a single line take the
+form of:
+
+\fBtag\fR \fIarguments ...\fR
+
+Comments are shell script style, beginning with # and extending to the
+end of the line.  Since several programs and scripts use this
+configuration file, the BProc master daemon will only pay attention to
+tags it recognizes and ignore all others.
+
+.SH CONFIGURATION
+.PP
+The first item on a configuration line is the \fBtag\fR.  The tag is
+case sensitive.  Arguments follow the tag.  Optional argments are
+indicated by square brackets.  Do not include the brackets in the
+configuration file.
+.TP
+\fBinterface\fR \fIinterfacename\fR
+The \fBinterface\fR command tells beoserv which network interface to
+listen on.
+.TP
+\fBbootfile\fR [\fInodespec\fR] \fIfilename\fR
+The \fBbootfile\fR command tells beoserv which boot file to serve to
+which nodes in the system.  If \fInodespec\fR is omitted then the
+default bootfile is set.  Otherwise the boot file for the nodes in
+\fInodepsec\fR is changed.  The \fInodespec\fR is a BProc node
+specification.
+
+.SH BOOT IMAGE CONFIGURATION
+.PP
+\fBconfig.boot\fR is the configuration file included in phase 1 and
+phase 2 boot images.  A copy of it is included in the boot images so
+those images will need to be recreated any time \fBconfig.boot\fR is
+modified.  The following configuration commands are for use in
+\fBconfig.boot\fR:
+.TP
+\fBrarp\fR \fBinitial_delay\fR \fIseconds\fR
+.TP
+\fBrarp\fR \fBmax_delay\fR \fIseconds\fR
+.TP
+\fBrarp\fR \fBbackoff\fR \fIseconds\fR
+.TP
+\fBrarp\fR \fBmax_time\fR \fIseconds\fR
+.TP
+\fBrarp\fR \fBrand\fR \fIfactor\fR
+The \fBrarp\fR commands control the behavior of the RARP client in
+phase 1 and phase 2 boot images.  This configuration command should be
+used in \fBconfig.boot\fR before creating the images.  All values are
+floating point numbers.
+
+\fBinitial_delay\fR and \fBmax_delay\fR control the initial and
+maximum delays between RARP requests.  After each request the delay is
+multiplied by \fBbackoff\fR.  \fBbackoff\fR must be greater than 1.0.
+Each time a new delay is calculated a random factor is added to the
+delay.  The size of the random factor is controlled by \fBrand\fR.
+\fBrand must be between 0.0 and 1.0.  \fBmax_time\fR is the maximum
+total time that the slave node will wait for a RARP response.
+.TP
+\fBmodarg\fR \fImodulename\fR \fIoptions ...\fR
+The \fBmodarg\fR command specifies a set of module arguments used when
+loading the specified module.
+.TP
+\fBinsmod\fR \fImodulename\fR \fIoptions ...\fR
+.TP
+\fBmodprobe\fR \fImodulename\fR \fIoptions ...\fR
+The \fBinsmod\fR and \fBmodprobe\fR commands are equivalent.  They
+cause the named module to be loaded with the specified options.  If no
+options are given and there is a modarg line with options, those will
+be used instead.
+.TP
+\fBphase\fR \fInumber\fR \fIconfig line\fR
+The \fBphase\fR prefix causes a particular configuration option to be
+used only in a particular phase of slave node boot up.  There are two
+phases (numbered 1 and 2).  Phase 1 is boot-up kernel which downloads
+the operation kernel from the master node.  Phase 2 is everything in
+the second kernel + initrd image.
+
+.SH NODE SETUP CONFIGURATION
+.PP
+Normally beoserv listens for node setup requests and runs the node
+setup program on a group of nodes once enough requests have been
+received.  The following options control the group node setup behavior.
+.TP
+\fBnode_up\fR \fBmax_clients\fR \fInumber\fR
+\fBnode_up\fR \fBmax_clients\fR sets the maximum group size for node
+setup.  Once beoserv receives \fInumber\fR node setup requests, it
+will start setting up a group of nodes immediately.  The default value
+is 256.  Larger values are not recommended due to limitations on the
+number of open file descriptors.
+.TP
+\fBnode_up\fR \fBstartup_delay\fR \fIseconds\fR
+\fBnode_up\fR \fBstartup_delay\fR controls how long beoserv will wait
+to get a full group of nodes.  Beoserv will start setting up nodes
+after \fIseconds\fR after the last node setup request.  The default value
+is 1.5 seconds.
+.TP
+\fBnode_up\fR \fBlisten_path\fR \fIpath\fR Beoserv listens for node
+setup requests on a UNIX domain socket.  \fIpath\fR controls where the
+socket is created.  The default value is \fB/tmp/.node_up\fR.
+.TP
+\fBnode_up\fR \fBlog_level\fR \fIlevel\fR
+\fBnode_up\fR \fBlog_level\fR \fIlevel\fR controls the how much
+logging node_up will do while setting up the node.  Possible values
+are \fBfatal\fR, \fBerror\fR, \fBwarning\fR, \fBinfo\fR and
+\fBdebug\fR.  \fBfatal\fR will log only fatal errors, \fBerror\fR will
+log any werrors including those which are not fatal and so on.  The
+default value is \fBinfo\fR.
+
+.SH BOOT FILE RECEIVE CONFIGURATION
+.PP
+These configuration options control the boot image download client
+used by phase 1 boot images.  These configuration directives should be
+placed in \fBconfig.boot\fR.  The phase 1 boot image will have to be
+rebuilt (see \fBbeoboot\fR(8)) after changing any of these.
+.TP
+\fBrecv\fR \fBinitial_delay\fR \fIseconds\fR
+.TP
+\fBrecv\fR \fBmax_delay\fR \fIseconds\fR
+.TP
+\fBrecv\fR \fBbackoff\fR \fIseconds\fR
+.TP
+\fBrecv\fR \fBmax_time\fR \fIseconds\fR
+.TP
+\fBrecv\fR \fBrand\fR \fIfactor\fR
+\fBinitial_delay\fR and \fBmax_delay\fR control the initial and
+maximum delays between file requests.  After each request the delay is
+multiplied by \fBbackoff\fR.  \fBbackoff\fR must be greater than 1.0.
+Each time a new delay is calculated a random factor is added to the
+delay.  The size of the random factor is controlled by \fBrand\fR.
+\fBrand must be between 0.0 and 1.0.  \fBmax_time\fR is the maximum
+total time that the slave node will try to download the file.
+
+.SH BOOT FILE SENDER CONFIGURATION
+.PP
+.TP
+\fBsend\fR \fBport\fR \fIport\fR
+.TP
+\fBsend\fR \fBconnect_timeout\fR \fIseconds\fR
+.TP
+\fBsend\fR \fBresend_timeout\fR \fIseconds\fR
+\fBresend_timeout\fR controls how long a client will wait around and
+act as a resender for the boot image.  The default value is 5 seconds.
+.TP
+\fBsend\fR \fBio_timeout\fR \fIseconds\fR
+
+.TP
+\fBbprocport\fR \fIportnumber\fR
+The \fBbprocport\fR command tells the BProc master daemon which TCP
+port it should listen on for connections from slave machines.  Only
+one \fBbprocport\fR command is allowed.  The master daemon will
+listen on this port on all interfaces.  See \fBinterface\fR.
+
+.TP
+\fBinterface\fR \fIinterfacename\fR \fIIPaddress\fR \fInetmask\fR
+The \fBinterface\fR command tells the BProc master daemon and the
+beoserv daemon to listen for connections on a particular interface.
+If multiple interface lines appear in the file, the daemons will
+listen on multiple interfaces.
+
+.TP
+\fBip\fR [\fInodenumber\fR] \fIIPaddress ...\fR
+The \fBip\fR assigns one or more IP addresses to a single node.  If
+the \fInodenumber\fR argument is given, the IP address will be
+assigned to that node.  If it is omitted, it will be assigned to the
+node following whatever node was assigned last.  If no nodes have been
+assigned, assignment will start with node zero.  IP addresses must be
+in dotted notation. (ie. 10.0.0.1) No hostnames are allowed.
+
+.TP
+\fBiprange\fR [\fInodenumber\fR] \fIIPaddress1\fR \fIIPaddress2\fR
+The \fBiprange\fR assigns addresses \fIIPaddress1\fR up to and
+including \fIIPaddress2\fR to nodes.  If the \fInodenumber\fR argument
+is given, the first address will be assigned to that node, the next
+address to the next node and so on.  If the \fInodenumber\fR argument
+is omitted, the addresses will be assigned starting with the node
+following whatever node was assigned last.  If no nodes have been
+assigned, assignment will start with node zero.
+
+.TP
+\fBlogfacility\fR \fIfacility\fR
+The \fBlogfacility\fR command specificies which log facility the BProc
+master daemon should use.  Some valid log facility names are
+\fBdaemon\fR, \fBsyslog\fR and \fBlocal0\fR.  See the syslog
+documentation for the complete set.  By default \fBdaemon\fR will be
+used.
+
+.TP
+\fBpingtimeout\fR \fIseconds\fR
+The \fBpingtimeout\fR command controls how frequently the BProc
+master and slave daemons will ping one another to make sure they're
+still alive.  This value is propaged to the slave machines when they
+connect to the master.
+
+.SH BUGS
+.PP
+Since the daemons ignore tags that it doesn't do anything with,
+it may ignore tags which are misspelled, invalid, etc.
+
+.SH SEE ALSO
+.PP
+\fBbeoboot\fR(8), \fBbeoserv\fR(8)

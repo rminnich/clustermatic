@@ -1,0 +1,37 @@
+.\" $Id: bproc_numnodes.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NUMNODES 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_numnodes \- get the number of nodes in the system
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_numnodes\fR(void);
+
+.SH DESCRIPTION
+.PP
+
+\fBbproc_numnodes\fR returns the total number of slave nodes in the
+system.  If BProc is not running or not installed, it will return
+zero.  The count does not include the front end machine.
+
+\fBNOTE:\fR As of BProc version 4, node numbering is not necessarily
+contiguous.  The value returned by \fBbproc_numnodes\fR function is
+the number of nodes, not the highest valid node number.
+
+The \fBbproc_numnodes\fR function is only available on the front end.
+
+.SH ERRORS
+.PP
+.TP
+\fBENODATA\fR
+No data available.  The function was called on a slave node.
+.TP
+\fBENOSYS\fR
+The BProc system is not loaded.
+.PP
+
+.SH SEE ALSO
+.PP
+\fBbproc_nodeinfo\fR(2),
+\fBbproc_nodestatus\fR(2),
+\fBbproc_move\fR(2)

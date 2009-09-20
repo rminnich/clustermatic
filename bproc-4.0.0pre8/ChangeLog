@@ -1,0 +1,915 @@
+Changes from 4.0.0pre7 to 4.0.0pre8
+
+	* Ported to Linux 2.6.9.
+
+Changes from 4.0.0pre6 to 4.0.0pre7
+
+	* Fixed 'slavetimesync' configuration flag.  It can now safely be
+	set to 'no'.
+
+	* Fixed SIGHUP reconfiguration of the master daemon.
+
+	* Fixed a pair of memory use after free problems in vmadump.
+	Thanks Michal Jaegermann.
+
+	* Added a patch for Linux 2.6.8.
+
+	* Fixed a segv in bpsh when using -a and no nodes are available.
+
+	* Fixed credential passing problem in ptrace.
+
+	* Fixed up slave time keeping code a little more.
+
+	* Fixed ghost's handling of clone() flags so that threads can be
+	created without spurious EFAULTs.
+
+	* Added PID mapping hooks to sys_tkill and sys_tgkill.
+
+	* Fixed mapping of pid values in siginfo for sys_{,t,tg}kill.
+
+	* Added pid mapping to sched_* syscalls.  This provides local
+	mapping.  Fowarding (e.g. from the front end) is not done.
+
+	* Added some code to make /proc/<pid>/exe work for remote
+	processes.  Note that this works only if the last exec() that the
+	process did was on the front end.  /proc/<pid>/exe is *not*
+	available on the slave node - this is impossible if the binary
+	migrated in.
+
+	* Added read-ahead code for PTRACE_PEEK* requests on ghosts.  This
+	should improve the performance of certain debuggers (e.g. gdb)
+	when run on the front end node.
+
+	* Fixed /proc/<pid>/task/<tid> on slave nodes.
+
+	* Updated kernel patch (2.6.8.1) for previous fixes.
+
+	* Fixed bogus process start times on slave nodes.
+
+	* Fixed a timing problem in the ghost process refresh that could
+	cause the first refresh request from procfs to hang and then fail
+	to get reasonable values.
+
+	* Added/updated man pages.  Got rid of old M4 goofiness.
+
+	* Added reliminary support for multiple master nodes.  The slave
+	daemon will now manage multiple instances of itself.
+
+	* Added 'slave privatefs' configuration flag.
+
+	* Fixed bproc_vexecmove/bproc_vrfork behavior that was causing gdb
+	to get confused and abort.  The child now stops on ptrace like it
+	should.
+
+	* Added BPROC_API_VERSION to headers to make it easier to write
+	stuff that works on bproc 3.x and 4.x.
+
+	* Added an RPM spec file that will work with SuSE 9.1.  Note that
+	the kernel package will still need patching.
+
+	* Added PPC (32-bit) support.
+
+	* Added PPC64 (64-bit & 32-bit) support.
+
+	* Cleaned up 32 bit compatibility build stuff for libbproc.
+
+	* Cleaned up gross behavior of poking a vector into the syscall
+	table.  Thanks to ppc64 for forcing me to fix that.
+
+	* Fixed problem with allocation of fd_sets in bpmaster and bpsh.
+
+	* Fixed a bizarro race with TRACEME and parent exit that could
+	cause the master node to BUG in choose_new_parent.
+
+	* Changed master daemon to use epoll instead of select.
+	
+Changes from 4.0.0pre5 to 4.0.0pre6
+	
+	* Fixed list corruption issue in bpmaster.
+
+	* Fixed missing put_group_info() in nodeset_move_perm().
+
+	* Fixed missing bproc_put_req() in bproc_deliver_response().
+
+	* Fixed addr_copied test in vmadump for 2.6.7-rc3.
+
+	* Ported to Linux 2.6.7.
+
+	* Fixed AMD64 vmadump 32 bit mode restore crash.
+
+	* Cleaned up mixed mode vmadump on AMD64.
+
+	* Fixed hangs in wait() caused by silent_exit not notifying the
+	parent after removing the child process.
+
+	* Fixed a race condition in ghost setup which could cause ghosts
+	to lose signals.
+
+	* Fixed STOP/CONT message generation to eliminate a race that
+	could cause gdb, strace to hang.
+
+	* Fixed bpfs lag problem which allowed node status to not be
+	reflected in access() calls in bpfs.
+
+	* Fixed bproc_nodeinfo getxattr calls.  Thanks Kevin Russell,
+	Michal Jaegermann.
+
+	* Fixed a memory leak in vexecmove/vrfork.
+
+	* Added bproc filter patch from Steven James to allow people to
+	use 'n' or '.' in front of the node numbers.
+
+	* Added 'rsh' emulation patch from Steven James.
+
+	* Added patch from Steven James to add proper process ID mapping
+	to make F_SETOWN, F_GETOWN work on slave nodes.
+
+	* Fixed bug in bproc_get_new_mm that could lead to schedule()
+	BUGing.
+
+	* Fixed task list walking bug in bproc_hook_do_exit().
+
+	* Added patch from Steven James to make kernel module installation
+	honor prefix=
+
+	* Fixed reparenting zombie brain damage in masq_remove_proc which
+	appears to lead to do_exit BUGing.
+
+	* Fixed slave daemon exit so that managed processes are
+	automatically untraced when they are killed.
+
+	* Added makefile fixes from Michal Jaegermann to make
+	compat_install work and get headers installed correctly.
+
+	* Fixed qstr isssues in bpfs as suggested by Michal Jaegermann.
+
+	* Fixed a slave node crash related to process group and session ID
+	mapping.
+
+Changes from 4.0.0pre4 to 4.0.0pre5
+
+	* Ported to Linux 2.6.6.
+
+	* Fixed ping timeout stuff on master and slave daemons.  The ping
+	behavior is changed.  Only the master sends pings now.  This
+	should keep big clusters from experiencing a constant low level of
+	ping noise.
+
+	* Fixed bpfs bug that caused the size of /bpfs/status to not get
+	updated properly.
+
+	* Fixed locking imbalance in vmadump.
+
+	* Fixed daemon connection management.  Slave daemon reconnect
+	should work again.
+
+	* Added mixed mode (32bit/64bit) support to VMADump for AMD64.
+
+	* Changed build system to use the Linux 2.6 approved build system
+	now that it seems not-broken enough.
+
+	* Fixed several cases where vrfork/vexecmove could hang.
+
+	* Removed vmadump's dependence on sys_call_table.  It can still be
+	used for testing.  It needs a couple of exported symbols now.
+
+	* Added time stamps to BProc's internal ping to keep node times
+	somewhat synced.
+
+	* Modified ping behavior so that only the master will wake up
+	and send ping messages.
+
+	* Moved masq pgrp and session to the signal struct so that it will
+	match the way the kernel manages things.
+	
+	* Fixed process group and session ID handling on the slave node.
+	Each prgp and session ID will have a masq equivalent on the nodes
+	as well.
+
+	* Fixed lots of broken syscalls (kill, get/setpgid, get/setsid,
+	getpgrp).
+
+	* Stopped practice of lifting function pointers from
+	sys_call_table.  CONFIG_REGPARM should work now.
+
+	* Removed hard coded kernel thread stack sizes.  CONFIG_4KSTACKS
+	should work now.
+
+	* Added hook to make CLONE_PARENT_SETTID and CLONE_CHILD_SETTID
+	work on slave nodes.
+
+	* Fixed kernel thread hiding (bproc_kcall()) stuff.
+
+Changes from 4.0.0pre3 to 4.0.0pre4
+
+	* Fixed a bug in the master daemon that caused a SEGV if a process
+	moved back to the master node.
+
+	* Ported from Linux 2.4.x to Linux 2.6.x
+
+	* Added a patch for Linux 2.6.5
+
+	* Changed process movement so that it's now atomic from the point
+	for the system calls.  No more MOVING flag or one process in two
+	places at once.
+
+	* Changed internal message format to a variable sized format.
+
+Changes from 4.0.0pre2 to 4.0.0pre3
+
+	* Added process location information to kernel space so that no
+	communication with the master daemon is required for user space
+	apps to learn where processes exist.
+
+	* Added PID mapping in proc for tgid (sort of).
+
+	* Updated BProc patch for previous two items.
+
+	* Started separating out system specific code in bproc/kernel.
+
+	* Changed libraries so that -fPIC is used on the libbproc.a as
+	well libbproc.so.
+
+Changes from 4.0.0pre1 to 4.0.0pre2
+
+	* Fixed a number of separate SIGHUP reconfiguration related crashes.
+
+	* Disabled ghost signal bypass code to avoid a hangup.  This code
+	should be put back once fixed.
+
+	* Changed the default configuration directory from /etc/beowulf to
+	/etc/clustermatic.  (Yes, we re-branded this thing yet again...)
+
+	* Cleaned up / messed up the make files and RPM spec so that the
+	RPM will get things automagically installed in the right places on
+	a x86_64.
+
+	* Removed a silly limit from vrfork and vexecmove.
+
+Changes from 3.2.5 to 4.0.0pre1
+
+	* Added bproc_nodespec functions to libbproc so that apps can
+	translate node ranges, etc. in a consistent way.
+
+	* Added suid_execmove sysctl entry to disallow execmove()ing suid
+	binaries.
+
+	* Fixed bproc_execdump (vmadump execdump) syscall bug which
+	resulted in getting EINVAL all time.
+
+	* Cleaned up memory space handling.
+
+	* Removed library cache/file request stuff.  This was
+	inappropriate here and never really worked well in practice.
+
+	* Ported to Linux 2.4.21 (source and patch)
+
+	* Fixed tgid assignment problem in the slave-side fork code.  This
+	fixes a lingering bug that led to apparently unkillable processes
+	on the slave node.
+
+	* Added PID mapping hooks to sys_tkill.
+
+	* Fixed slave daemon to not lag behind on slave cleanup.
+
+	* Fixed security problem with IO redirection and execmove.
+
+	* Modified master daemon to use a sparsely numbered node map.
+
+	* Modified vexecmove_io interface to allow for easier addition of
+	flags in the future.  (send_info, type are replaced by flags)
+
+	* Added "bpfs" virtual file system to represent machine state.  This
+	is only available on the master node.
+
+	* Changed node states to be arbitrary strings instead of the
+	pre-defined set compiled into BProc.
+
+	* Removed existing (slow) paths for manipulating node state.  THIS
+	MEANS NODE STATE IS NO LONGER AVAILABLE ON SLAVE NODES.
+
+	* Cleaned up mmap error path in vmadump.
+
+	* Ported to Opteron/K8/Hammer/AMD64/x86_64.
+
+	* Changed the message tracing feature of the daemons to dump raw
+	messages to a file to allow for better off-line analysis.
+
+	* Remove gethostbyname references from the slave daemon.  You have
+	to feed it raw IPs which is usually going to be the case in our
+	boot-up situations anyway.
+
+	* Updated system call numbers on x86 to get rid of the conflict
+	with the "security" syscall.
+
+Changes from 3.2.4 to 3.2.5
+
+	* Fixed vexecmove hang.
+
+	* Added a reverse mapping and more clever handling of FD sets in
+	bpmaster to increase efficiency with large node counts.
+
+	* Cleaned up connection handling in master daemon.
+
+	* Added request free list to master daemon.
+
+	* Fixed possible slave side kernel oops in wake_up_process()
+
+	* Fixed some spelling errors.  Thanks Steven Cole <scole@lanl.gov>
+
+	* Fixed issues with squashing BE_SAMENODE in vexecmove.
+
+	* Extended squashing behavior to vrfork.
+
+Changes from 3.2.3 to 3.2.4
+
+	* Added code to bpmaster to automatically increase rlimits on the
+	number of open file descriptors to support large node counts.
+
+	* Added code to bpsh to support large node counts.
+
+	* Fixed IO setup for moving to localhost case.
+
+	* Added "flags" to vmadump hook freeze arguments.
+
+	* Added VMAD_FLAG_BPROC to vmadump for BProc internal use.  Also,
+	added the idea of privileged flags.
+
+	* Fixed a lingering master node process status problem where
+	processes could appear to be stopped (T) when they weren't if
+	using ptrace.  Note that this required a change in the kernel
+	patch.
+
+	* Added a patch for Linux 2.4.20, removed the 2.4.19 kernel patch.
+
+Changes from 3.2.2 to 3.2.3
+
+	* Fixed vmadump to restore VM_EXECUTABLE & VM_DENYWRITE flags as
+	suggested by Eric Roman <eroman@lbl.gov>.
+
+	* Removed BProc hooks from kernel/kmod.c.  Having them in there
+	lead to a possible deadlock if request_module got called from
+	within a move call.  There are likely other instances in which
+	that can happen as well.
+
+	* Fixed RPM spec definitions for building multiple versions of the
+	kernel modules.
+
+	* Moved the cwd and I/O code so that it's after vmadump_thaw so
+	that vmadump hooks can setup the filesystem for chdir, etc.
+
+Changes from 3.2.1 to 3.2.2
+
+	* Fixed build problems and warnings with gcc 3.2.
+
+	* Changed rfork behavior to make BE_SAMENODE never happen.
+	Effectively, this changes rfork() -> fork() when rforking to your
+	current node.  Note that the I/O handling isn't done in that case.
+	(that's a bug :)
+
+	* Reworked rfork slightly to handle placing processes on the
+	current node transparently.
+
+	* Fixed a procfs race with process ID mapping that could lead to
+	kernel oopses on slave nodes.
+
+	* Fixed a slave side kernel oops.  The symptom was bpslave oopsing
+	in wake_up.  The cause was a semaphore was used in a spot where I
+	should have used a completion.
+
+	* Added a bit of makefile goop to allow building the kernel modules
+	with a different compiler than the rest.  (KCC=)
+
+Changes from 3.2.0 to 3.2.1
+
+	* Fixed an oddity in bproc_proclist and bproc_nodelist where it
+	would still allocate memory even if the return value is zero.
+
+	* Fixed rank reporting via BPROC_RANK.
+
+	* Fixed typo keeping filerequest support from getting built in.
+
+	* Fixed bproc_*execmove so that the execve hook to grab binaries
+	from the front end works there too.
+
+	* Fixed some bad behavior in bpsh.  It called wait too often which
+	made for bad performance when running it on slave nodes.
+
+	* Added freeze/thaw hooks to vmadump.
+
+	* Fixed vmadump byte counting problem.
+
+	* Fixed some SMP related locking issues in procfs code.  This
+	change required a new bproc patch.  The patch is provided for
+	Linux 2.4.19.
+
+Changes from 3.1.10 to 3.2.0
+
+	* Added another work around a Linux TCP bug.  This problem
+	resulted in occasional segfaults when using the ghost execve hook.
+
+	* Fixed a locking bug that could lead to master node crashes.
+
+	* Fixed a lingering bpsh problem which could lose output from
+	child processes.  (Patch from Sean Dilda <agrajag@scyld.com>)
+
+	* Made flush_icache in vmadump conditional as suggested by
+	Grant Taylor <gtaylor@sw.starentnetworks.com>
+
+	* Fixed problems with using PTRACE_TRACEME on slave nodes.
+
+	* Fixed a vrfork buglet which could lead to kernel oopses.
+
+	* Fixed a problem with the ghost execve hook not doing mm_release
+	on the slave node like a real execve.  This lead to the parent
+	process hanging if it used vfork() on the slave node.
+
+	* Changed vrfork return value semantics.  The vrfork return value
+	is now -1, your index in the list of nodes or the total number of
+	nodes.
+
+	* Changed vrfork and vexecmove interface to separate input and
+	output.
+
+	* Added a bunch of BProc-specific errno values to allow for more
+	detailed error reporting.
+
+	* Fixed process migration hangs in the case of sender failure.
+
+	* Added rank reporting to vexecmove via the environment variable
+	BPROC_RANK=XXXXXXX.
+
+	* Changed bpsh to use vexecmove instead of migrating each copy of
+	the process off the front end manually.
+
+	* Fixed a case where permissions of the ghost process and the real
+	process could get out of sync.
+
+	* Changed behavior for failed power off on the slave node from a
+	reboot to a halt.
+
+	* Added a patch for Linux 2.4.19.
+
+Changes from 3.1.9 to 3.1.10
+
+	* Added vexecmove to do basically the same thing as vrfork with
+	arbitrary binaries.
+
+	* Rewrote vrfork (and therefore also vexecmove) so handle multiple
+	processes per node somewhat reasonably.
+
+	* Added "locked" mode for bpstat.  (-L)
+
+	* Fixed a bug in move interface code that could lead to kernel
+	oopses.
+
+Changes from 3.1.8 to 3.1.9
+
+	* Added a patch for Linux version 2.4.18.
+
+	* Changed VMADump FPU handling on x86 so that a process which has
+	not used its FPU will not generate a clean FPU state before
+	sending.  This way the FPU state will be generated on the remote
+	machine.
+
+	* Fixed VMADump so that no pages are ever stored for VM_IO regions.
+
+	* Fixed a bug that caused zombies to persist after a successful
+	wait() call on slave nodes.
+
+	* Fixed vrfork path through move code.  A kernel oops was possible
+	because of a misplaced bit of TCP work around code.
+
+	* Fixed kernel oops with kernel_thread() on slave nodes.  (as
+	caused by NFS mounts, etc.)
+
+	* Fixed master dameon process accounting bug.  It failed to note
+	parent process IDs for remote forks.
+
+	* Fixed master daemon process accounting bug.  It failed to clear
+	a pending request on one of the move error paths.
+
+	* Fixed problems in bproc_unmasq that could lead to slave node
+	crashes.
+
+	* Fixed a race condition in move that could lead to lost parent
+	exit messages.  That could lead to process child counting problems
+	later on.
+
+Changes from 3.1.7 to 3.1.8
+
+	* Fixed CLONE_* flag handling added in 3.1.6.
+
+	* Fixed nlchild counting bug in rfork failure path.
+
+	* Ditched docbook in favor of a few home grown M4 macros which are
+	both 100 times faster and will work just about everywhere.
+
+	* Reworked makefiles a bit to reduce replication.
+
+	* Removed ksyscall kernel module.  Most of it was unused.  The
+	used portions were merged with bproc.o
+
+Changes from 3.1.6 to 3.1.7
+
+	* Added PowerPC support!!
+
+	* Fixed a possible SIGHUP reconfiguration crash in bpmaster.
+
+	* Fixed connection handling bug in bpmaster that caused slave
+	connections to disfunction.
+
+	* Added /proc/sys/bproc/proc_pid_map to control process ID mapping
+	in /proc on the slave nodes.  2=map for all (default), 1=map for
+	non-root only, 0=no mapping.
+
+	* Added patch for Linux PID allocator bug.
+
+Changes from 3.1.5 to 3.1.6
+
+	* Added bproc_execve which allows processes on slave nodes to
+	perform execve on the front end machine using their ghost process.
+
+	* Added a hook in sys_execve to transparently use the ghost for
+	execve if the local execve fails.  This can behavior can be
+	switched on and off via /proc/sys/bproc/execve_hook.
+
+	* Updated kernel patch for new features.  Included patch is
+	against 2.4.17.
+
+	* Added hot reconnect for slave daemons.  The slave can now
+	reconnect to the master at runtime w/o affecting the slave's
+	state.  (bpctl --reconnect)
+
+	* Added another work-around for another Linux TCP bug.  TCP sure
+	does seem awfully broken lately.
+
+	* Added "async" versions of the cache mangement calls.
+
+	* Fixed bproc.o so that sysctl table registration can fail w/o
+	causing insmod to fail.  This is incase the kernel doesn't support
+	sysctl.
+
+	* Fixed master daemon bug which resulted in failure to note a
+	process's new location during a move and resulted in message loops
+	between the kernel and the master daemon.
+
+	* Fixed a security hole involving ptrace and setuid binaries on
+	slave nodes.
+
+	* Fixed a security that would cause the master default to allowing
+	connections from unreserved ports.
+
+	* Fixed BProc's CLONE_PARENT, CLONE_THREAD, CLONE_PTRACE handling
+	to some extent.  It's still got a few race conditions but at least
+	it does something approaching "correct" at this point.
+
+	* Reworked VMADump to reduce its foot print on the caller's
+	kernel stack.  Kernel stack overflows have been observed here.
+
+Changes from 3.1.4 to 3.1.5
+
+	* Fixed VMADump FPU restore to trap restore failures and restore a
+	clean FPU state in those cases.  This should address (although not
+	really solve) problems migrating between FPU architectures.
+
+	* Fixed a master daemon bug that could result in move responses
+	getting lost.
+
+	* Added first take on vrfork (vector rfork) to make creation of
+	large numbers of child processes efficient.
+
+	* Cleaned up some lingering goofiness in rfork related to error
+	handling and signals.
+
+Changes from 3.1.3 to 3.1.4
+
+	* Added come code to work around a Linux TCP bug.  The symptom of
+	this one is two machines where the machine doing the connect has a
+	TCP connection in the ESTABLISHED state and the other machine has
+	no connection at all.  This bug exists in 2.4.13 and 2.4.16.  I
+	noticed it when migrating 10000 jobs off the front end machine
+	simultaneously.  About 10 or so would end up in that state every
+	time.  This was not detected since the connecting end was blocking
+	on a read.
+
+	* Added some code to retry connections for "Connection timed out"
+	during moves.  This seems necessary under really high load.  ...or
+	maybe if your network sucks.
+
+	* Fixed problems where signals would sometimes not be forwarded to
+	remote processes.
+
+	* Fixed a possible race in ghost status updates which could lead to
+	not seeing stopped children with wait()
+
+	* Cleaned up some locking in the ghost code.
+
+	* Backed out signal bypass stuff.  I'm not sure it's broken but
+	I've seen some weird stuff going on under high load so it's out
+	for now.
+
+	* Fixed a possible kernel oops in bproc_rfork.
+
+	* Fixed bpsh IO fowarding race condition.  bpsh could fail to
+	close stdin for the remote process if it received EOF on its stdin
+	before the connection from the remote process AND the size of
+	input on bpsh's stdin is zero bytes.
+
+	* Added "pingtimeout" to the configuration language... finally.
+	The configuration affects the master and the slave and can be
+	changed at runtime via SIGHUP to the master.
+
+	* Added sysctl interface.  This is mostly for debugging right now
+	but I expect more will go in there in the future.
+
+	* Added non-blocking versions of reboot, halt, poweroff.  The
+	blocking versions of those calls are now interruptible.
+
+	* Fixed a deadlock problem in VMADump.  The symptom of this was
+	'ps' or anything else that read /proc getting hung up.
+
+	* Fixed tiny bug in bplib that kept -d from working.
+
+Changes from 3.1.2 to 3.1.3
+
+	* Fixed stupid bug that kept bproc_move_io from doing the IO
+	forwarding correctly.
+
+	* Added signal bypass and changed parent exit handling to try and
+	reduce the number cases where potentially 1000s of ghosts will
+	wake up on the front end to do nothing more than forward a signal.
+
+	* Fixed a bad VMADump bug that would result in zero pages after a
+	move.
+
+	* Fixed (I think...) IO fowarding problems with bpsh that caused
+	things like "bpsh -a uptime | wc -l" to not always yield the same
+	result.
+
+	* Fixed problem with SIGHUP and bpmaster which would lead to ping
+   	timeouts on nodes.
+
+Changes from 3.1.1 to 3.1.2
+
+	* Changed IO forwarding infrastructure.  execmove_io, etc in the
+	library now allow for much more flexible IO forwarding.
+
+	* Collapsed VMADump syscall into BProc syscall.  vmadump.o now
+	doesn't install a syscall by default. Replaced vmadlib with bplib.
+	Added VMADump calls to BProc library.
+
+	* Modified connection management on the master node.
+
+	* Fixed up RPM spec file for newer Red Hat stuff.
+
+Changes from 3.1.0 to 3.1.1
+
+	* Fixed patch files.
+
+Changes from 3.0.1 to 3.1.0
+
+	* Updated patches for Linux 2.4.9 and 2.4.10
+
+	* Added support for multiple interfaces and multiple addresses for
+	nodes.  This may confuse things which expect the master address to
+	be unique.
+
+	* Changed "interface" in configuration language.
+
+	* Added "nodes" configuration directive.  This is now *required*
+	to set machine size.
+
+	* Changed "ip" and "iprange" in configuration language.
+
+	* Fixed setuid/bproc_execmove security hole.  This allowed an
+	ordinary user to execmove() programs to nodes which the user
+	wouldn't otherwise have permission to execute on.
+
+	* Changed kernel interface.  Statically linked programs that get
+	information about nodes (this includes the magic dynamic linker)
+	will have to be relinked.
+
+	* Improved "bpstat" and "bpctl".  Try -U!
+
+	* Added patch "glibc-2.2.3-bproc-fr.patch".  This is the dynamic
+	linker patch for the new library caching mechanism.  The old
+	mechanism is deprecated and will be removed as soon as boot
+	support for the new mechanism exists.
+
+	* Added preliminary #! type script support to bproc_execmove().
+	This is _really_ preliminary and something of an experiment.
+
+	* Modified set of states.  Added "boot" state in unavailble's
+	place.  "unavailable" still a state but is no longer the state the
+	master uses while the node_up script is running.
+
+	* Added documentation mainly in the form of man pages for the
+	bproc library and utilities.
+
+   libbproc:
+
+	* Added bproc_notify() mechanism to allow user processes to be
+	notified of machine state changes.
+
+	* Added bproc_nodelist() to the libbproc.  This is a lower
+	overhead mechanism for getting the entire machine state.
+
+	* Added bproc_version() to allow apps to get version information
+	about the currently running BProc system.
+
+	* Changed bproc_node_info_t.
+
+	* Added bproc_request_file().  This is the file request interface
+	that the library cache uses.
+
+	* Added bproc_nodecachepurgefail(), bproc_nodecache_purge.
+
+Changes from 3.0.0 to 3.0.1
+
+	* Ported to Linux 2.4.7
+
+	* Make bpstat a little prettier.
+
+	* Added beginnings of advanced library caching.
+
+	* Fixed nasty process leak in x86 ptrace that got introduced in the 2.4.x port.
+
+	* Fixed some uninitialized data bogosity in the ghost ghost that
+	could occasionally lead to a kernel oops on the front end.
+
+	* Made process migration more robust in the face of slave
+	failures. It used to be possible to get a process hung (although
+	killable w/ ctrl-c) in the middle of migration if the slave went
+	away.
+
+Changes from 3.0.0.beta to 3.0.0
+
+	* Ported to Linux 2.4.x
+
+	* Many small bug fixes.
+
+Changes from 2.2.2 to 3.0.0.beta
+   External:
+
+	* Added support for ptrace (gdb,strace).
+
+	* Improved VMADump to do a better job migrating processes with
+	large untouched memory regions.  (i.e. large BSS in execmove)
+
+	* Modified procfs on the slave side so that processes see process
+	IDs they can use.
+
+	* Improved robustness in the face of failures.  Produce errors in
+	the face of half finished requests where there slave in question
+	dies.
+
+	* Added version checking in the network protocol and the kernel to
+	user space interface to try and prevent mismatched components and
+	architectures.
+
+	* Improved IP address configuration.  Multiple and non contiguous
+	ranges are allowed now.
+
+	* Removed /dev/bproc.
+
+	* Changed the node permission scheme to a more conventional UNIX
+	user,group and bits scheme.
+
+	* Rationalized the library interface a bit.  (name changes, etc.)
+
+	* Replaced reboot,halt,pwroff states with explicit commands.
+
+	* Added some documentation on the internals.
+
+   Internal:
+
+	* Removed slave side ghosts.  This is a major cleanup of the
+	process book keeping.  wait() on the slave side is sometimes done
+	as a remote syscall now.
+
+	* Added blocking remote system calls using ghost on the master.
+
+	* Cleaned up message routing.  No more giant case statements.
+	Removed nasties relating to multiple ghosts.
+
+Changes from 0.2.1 to 2.x
+
+	* Dropped sparc32 support.  (still exists in vmadump)
+
+	* Added notion of slave-side ghost.
+
+	* Added bpstat, bpsh, bpcp, bpctl utilities.
+
+	* Added status flags and script hooks for automatic cluster setup.
+
+	* Moved documenation to separate Beowulf documentation package.
+
+	* VMADump mmap() bugfixes.
+
+	* Changed configuration language to work with Scyld beowulf setup
+	stuff.
+
+Changes from 0.2.0 to 0.2.1
+
+	* Added sparc32 support for bproc.  rfork does not work on this
+	architecture.  (It crashes the machine.)  There seems to be a
+	problem with kernel_thread (and clone in general) on this arch.
+
+	* Cleanup + improvements to master and slave daemons to enhance
+	robustness.  (Specifically behavior w/ node failure, etc.)
+
+	* Documentation updates.
+
+Changes from 0.1.1 to 0.2.0
+
+	* Added Alpha support for bproc and vmadump!  Alpha vmadump is
+	lacking the extra binfmt for dump files.
+
+	* Changed /proc handling so that things like ps wont block forever
+	if a slave node doesn't respond with status.
+
+	* vmadump: i386: added code to save FPU state.  (previously, FPU
+	state was unsaved.) (this is currently untested)
+
+	* vmadump: Fixed a possible security issue with undumping signal
+	handler state.
+
+	* struct siginfo handling cleaned up so there should be no more
+	problems w/ glibc headers.  Ever.  (The Alpha port led to more
+	less-solvable problems.  That'll teach me to use kernel structs
+	in user space.)
+
+	* Updated kernel/vmad.magic to recognize alpha dumps.
+
+	* Added idea of a node map to libbproc.  A list of node numbers in
+	$HOME/.bprocnodes will become the application's nodes 0 -> n-1
+
+	* Some syscall #'s changed... libraries will likely have to be
+	re-built.
+
+	* Added documentation.  There is a user's guide and the beginnings
+	of a document about the internals of bproc.
+
+Changes from 0.1.0 to 0.1.1
+
+	* SEND_SIG handling fixed.  (No longer hangs slave nodes.)
+
+	* Includes restructured to work with glibc-2.1.x
+
+Changes from 0.0.3 to 0.1.0
+
+	* Sparc32 support added to VMADump.  (The rest of bproc is still
+	x86-only but that should change soon.)
+
+	* Updated "dumpcheck" program so that it agrees with VMADump on
+	the output format.
+
+	* Fixed typo that caused slave nodes to crash when children of PID
+	masqueraded processes exited.
+
+	* Added support (not highly tested) for process group and session
+	ID operations.  This allows job control to work on remote jobs
+	(i.e. ctrl-z, bg, fg)
+
+	* Fixed wait behavior: Local parent processes with remote children
+	can now wait() on children and wake up when the child is stopped.
+	(Previously would only work when the child exited.)
+
+	* Moved signal delivery into the kernel.
+
+	* Master and slave daemons cleaned up some more.  Still not very
+	nice though.
+
+	* libbproc updated, dynamic version available.  Also, can now "make
+	install" to install as a proper library.  (#include <sys/bproc.h>
+	and -lbproc)
+
+Changes from 0.0.2 to 0.0.3
+
+	* Added flags to kernel configuration to turn on/off bproc.  This
+	is done in anticipation of adding this to some kind of a normal
+	kernel distribution.  Ha!  That's a ways off.  Just trying to
+	think ahead.
+
+	* Added EXECMOVE method of remote process creation.  This is exec
+	and then move so you can run ordinary binaries (i.e. /bin/ls)
+	remotely that are not installed on the remote node.  (Still need
+	all the libraries there though.)
+
+	* Added configuration file for master daemon.  Master daemon will
+	now determine node number from the IP address of the connecting
+	slave.  Also, the master writes /var/run/bproc with current
+	machine configuration.
+
+	* Added the beginnings of a libbproc.  It's basically just
+	wrappers around the syscalls and an interpreter for
+	/var/run/bproc.
+
+	* Changed ksock to ksyscall.  Rewritten to be thread safe
+	(hopefully).
+
+	* Many many Ooops and system hang causing bugs missing.
+	Especially for for SMP machines.
+
+

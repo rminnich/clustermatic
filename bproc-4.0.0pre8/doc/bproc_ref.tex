@@ -1,0 +1,75 @@
+% $Id: bproc_ref.tex,v 1.3 2002/07/29 23:58:20 mkdist Exp $
+\documentclass[oneside]{book}
+\usepackage{makeidx}
+\usepackage{epsfig}
+\makeindex
+
+\parindent0in
+\parskip.2in
+
+\begin{document}
+\title{BProc Reference Manual}
+\author{Erik Hendriks}
+\maketitle
+
+\tableofcontents
+
+\part{BProc User Reference}
+\include{install}
+\include{conf}
+
+\include{overview}
+
+\chapter{Program Reference}
+\include{bpsh}
+\include{bpmaster}
+\include{bpslave}
+
+\chapter{C Library Reference}
+\include{bproc_access}
+\include{bproc_chgrp}
+\include{bproc_chmod}
+\include{bproc_chown}
+\include{bproc_currnode}
+\include{bproc_execmove}
+\include{bproc_masteraddr}
+\include{bproc_move}
+\include{bproc_nodeaddr}
+\include{bproc_nodecachepurgefail}
+\include{bproc_nodecachepurgeok}
+\include{bproc_nodechroot}
+\include{bproc_nodehalt}
+\include{bproc_nodeinfo}
+\include{bproc_nodelist}
+\include{bproc_nodenumeber}
+\include{bproc_nodepwroff}
+\include{bproc_nodereboot}
+\include{bproc_nodesetstatus}
+\include{bproc_nodestatus}
+\include{bproc_notifier}
+\include{bproc_numnodes}
+\include{bproc_pidnode}
+\include{bproc_proclist}
+\include{bproc_requestfile}
+\include{bproc_rfork}
+\include{bproc_version}
+
+\part{BProc Hacker Reference}
+
+Note: This portion of the manual is incomplete and will always be at
+least a little bit out of date.  It is provided in hopes that it will
+be better than nothing at all.
+
+\hfill - Erik
+\include{move}
+\include{procacct}
+\include{messages}
+
+\printindex
+
+%\include{bproc_ref.ind}
+%\begin{theindex}
+%\end{theindex}
+
+%\printindex
+\end{document}

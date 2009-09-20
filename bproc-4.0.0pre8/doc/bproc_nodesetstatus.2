@@ -1,0 +1,47 @@
+.\" $Id: bproc_nodesetstatus.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_NODESETSTATUS 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_nodesetstatus \- set status of a node
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_nodesetstatus\fR(int \fInode\fR, int \fIstatus\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_nodesetstatus\fR sets the status of
+\fInode\fR to \fIstatus\fR.  A node's status can only be
+changed if the node is connected to the master daemon \- that is, if it
+is not down.  Setting a node's status to down force an immediate
+disconnect of the node.  You must be the superuser to change node
+status.
+
+.SH RETURN VALUE
+.PP
+On  success,  zero  is returned.  On error, \-1 is returned
+and errno is set appropriately.
+
+.SH ERRORS
+.PP
+.TP
+\fBEPERM\fR
+The calling process does not have permission to
+move to node.  You must be the superuser to use
+\fBbproc_nodesetstatus\fR. 
+
+.TP
+\fBEINVAL\fR
+\fInode\fR is an invalid node number or
+\fInode\fR is down. 
+
+.TP
+\fBEBUSY\fR
+The BProc system is not running.
+
+.PP
+
+.SH SEE ALSO
+.PP
+
+\fBbproc_nodeinfo\fR(2)

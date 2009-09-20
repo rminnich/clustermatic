@@ -1,0 +1,56 @@
+beonss: glibc nss routines for Beowulf
+
+---
+
+VERSION CHANGES
+
+cm1.2: (11/3/2004) hendriks@lanl.gov
+	* Simplified build process.
+	* Whacked up spec file for mixed 32bit/64bit builds.
+
+cm1.1: (10/15/2003) gwatson@lanl.gov
+	* support for Clustermatic 4
+	* gethostbyname() will now work for master and self
+	* gethostbyaddr() will work for master IP, self IP and loopback
+
+1.0.12: (1/9/2001) newt@scyld.com
+	* BUGFIX: introduced an error in the spec file of 1.0.11. /etc/nsswitch
+	  would become corrupted on install of rpm with "nisbproc" in place of
+	  "nis bproc" for hosts.
+
+1.0.11: (1/9/2001) newt@scyld.com
+	* updated spec file to generate /etc/nsswitch.conf as a post step.
+	* updated spec file to use a buildroot.
+
+1.0.10: (11/26/2000) newt@scyld.com
+	* added getpwnam to support apache.
+
+1.0.9: (11/21/2000) newt@scyld.com
+	* added more descriptive errnos
+	* added a 'test' make target and program for debugging.
+
+1.0.8: (11/14/2000) newt@scyld.com
+	* BUGFIX: specfile install target didn't work right.
+
+1.0.7: (11/13/2000) newt@scyld.com
+	* BUGFIX: incoming errno values are now zeroed.
+
+1.0.6: (11/02/2000) newt@scyld.com
+	* tweaked the bundled spec file.
+
+1.0.5: (11/02/2000) newt@scyld.com
+	* changed getpwuid() to place empty strings in place of NULL for
+	  empty fields. I don't know if this is correct -- but some
+	  software seems to rely on it.
+
+1.0.4: (8/30/2000) newt@scyld.com
+	* updated to use the reverse lookup facilities of bproc ver 2.1.6
+
+1.0.3: (8/29/2000) newt@scyld.com
+	* BUGFIX: gethostbyaddr() always returned the host for node -1.
+
+1.0.2: (8/29/2000) newt@scyld.com
+	* improved packager support
+
+1.0.1: (8/29/2000) newt@scyld.com
+	* gifted unto the world.

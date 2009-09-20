@@ -1,0 +1,128 @@
+#!/bin/sh
+#
+# bjs           This shell script takes care of starting and stopping \
+#               bjs (BProc Job Scheduler).
+#
+# chkconfig: 2345 73 27
+# description: bjs is a job scheduler for the BProc environment.
+# processname: /usr/sbin/bjs
+# config: /etc/clustermatic/bjs.conf
+#
+### BEGIN INIT INFO
+# Provides: bjs
+# Required-Start: clustermatic
+# Required-Stop: clustermatic
+# Default-Start: 3 5
+# Default-Stop: 0 1 2 4 6
+# Description: BProc Job Scheduler
+### END INIT INFO
+#
+# $Id: rc.bjs,v 1.6 2004/08/10 16:48:39 mkdist Exp $
+#--------------------------------------------------------------------------
+
+# Load startup function library with compatibility crap for RH and SuSE...
+if [ -f /etc/rc.d/init.d/functions ] ; then
+    . /etc/rc.d/init.d/functions
+    Xdaemon() {
+	daemon $*
+	echo
+    }
+    Xkillproc() {
+	killproc $*
+    }
+    Xfailure() {
+	failure ""
+	echo
+    }
+    Xsuccess() {
+	success ""
+	echo
+    }
+    Xstatus() {
+	status $*
+    }
+elif [ -f /etc/rc.status ] ; then
+    . /etc/rc.status
+    Xdaemon() {
+	startproc $*
+	rc_status -v
+    }
+    Xkillproc() {
+	killproc $*
+    }
+    Xfailure() {
+	rc_failed 1
+	rc_status -v
+    }
+    Xsuccess() {
+	[ 0 ]
+	rc_status -v
+    }
+    Xstatus() {
+	echo -n "$*:"
+	checkproc $*
+	rc_status -v
+    }
+else
+    echo >&2 "I know how to run on this machine..."
+fi
+#-------------------------------------------------------------------------------
+
+prog=bjs
+
+[ -x /usr/sbin/$prog ] || exit 0
+
+RETVAL=0
+
+start () {
+    echo -n $"Starting $prog: "
+    Xdaemon /usr/sbin/$prog
+    RETVAL=$?
+    [ $RETVAL = 0 ] && touch /var/lock/subsys/$prog
+    return $RETVAL
+}
+
+stop () {
+    # stop daemon
+    echo -n $"Stopping $prog: "
+    Xkillproc /usr/sbin/$prog
+    Xsuccess
+    RETVAL=$?
+    [ $RETVAL = 0 ] && rm -f /var/lock/subsys/$prog
+    return $RETVAL
+}
+
+restart () {
+    stop
+    start
+    RETVAL=$?
+    return $RETVAL
+}
+
+# See how we were called.
+case "$1" in
+    start)
+	start
+	;;
+    stop)
+	stop
+	;;
+    status)
+	Xstatus /usr/sbin/bjs
+	RETVAL=$?
+	;;
+    restart)
+	restart
+	;;
+    reload)
+	echo -n $"Reloading $prog: "
+	Xkillproc /usr/sbin/bjs -HUP
+	RETVAL=$?
+	echo
+	;;
+    *)
+        echo $"Usage: $0 {start|stop|restart|reload|status}"
+        RETVAL=1
+esac
+
+exit $RETVAL

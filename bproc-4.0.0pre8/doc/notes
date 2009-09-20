@@ -1,0 +1,548 @@
+---------------------------------------------------------------------------
+2/8/2001: the hack to knock pids out of the way bproc_masq_add_proc needs
+  something somewhere else to make it less nasty.  Maybe some code in the
+  slave daemon to keep track of what pids are really local.  The
+  concern is that a signal might end up getting delivered to the wrong
+  copy of the process and would therefore be lost.
+
+
+
+
+---------------------------------------------------------------------------
+OVERVIEW
+(or: Erik's crack-pot scheme)
+---------------------------------------------------------------------------
+
+ Master Node                                    Slave Node
+
++---------------+   +---+         +---+
+| Real PID 100  |   | D |<--Net-->| D |
++---------------+   +---+         +---+
+       |              ^             ^
+     Child            |             |
+       V              |             |
+ /-------------\      |             |     +---------------+
+| Ghost PID 101 |<----/             \---->| Real PID 101  |
+ \-------------/                          +---------------+
+
+What's happened:
+  Pid 100 on the master node has done either an rfork() or rexec()
+  operation to create the child process,PID 101, on the slave node.
+
+The real processes are perfectly normal user processes.
+
+The "ghosts" are kernel threads with no memory spaces, file
+descriptors or current working directory.  They exist so that the
+existing signal and waitpid mechanisms can continue to work with
+little or no modification.  Ghosts provide the following functions:
+
+ * Receive signals (which will be forwarded to the real
+   processes they represent)
+ * Fork when requested to allocate new pids for remote child
+   processes.
+ * Wait when necessary to pick up their children which may
+   have exited.
+ * Exit with appropriate status so that wait() will work.
+ * Serve as place holders to hold process status.
+
+
+----------------------------------------------------------------------
+BPROC MESSAGE DESCRIPTIONS
+----------------------------------------------------------------------
+BPROC_JOIN
+  user app (Wants to ghostify self.)
+   |  User app supplies all this info and supplies
+   |  it to the kernel in order to rexec
+   |
+   |    node number, cmd, argv, envp
+   V
+  kernel ghost services (on behalf of the user app)
+   |  cmd, argv, envp pointers are saved.
+   |  listen at a port for the slave connection.
+   |
+   |    node number, pid, ppid, port
+   V
+  ghost master daemon
+   |  Node number determines which slave to send to.
+   |  pid, ppid are taken from the process making the request
+   |
+   |    Send: pid, ppid, port
+   V
+  slave daemon
+   |  Forks, assigned requested PID's, gets other information
+   |  by connecting back to the specified port.
+   |  (kernel ghost services kick in here to send the information in question)
+   |  ** Request -> Response at this point **
+   |
+   |  Send: pid, result
+   V
+  ghost master daemon
+   |  Simple forward
+   |
+   |  Send: pid, result
+   V
+  kernel ghost services
+      Rexec ok!  Great!
+      Throw away process resources (open files, fs context, memory space, etc)
+      Forward signals until we're told to exit.
+
+
+BPROC_SEND_SIG
+  This sends a signal via kill(2).  This is done by the remote masqueraded app.
+  No checking of permissions is assumed to be done.
+  kernel masquerading (on behalf of masqueraded app)
+   |  Performs kill(pid,sig) but pid is not present on the local machine
+   |  so the request is forwarded.
+   |
+   |  Send: pid,sig,uid
+   V
+  slave daemon
+   |  Simple forward
+   |
+   |  Send: pid,sig,uid
+   V
+  master daemon
+   |  Perform kill(pid,sig) as uid
+   |  Return result to masqueraded app
+   |  ** Request -> Response at this point **
+   |
+   |  Send: result
+   V
+  slave daemon
+   |  Simple forward
+   |
+   |  Send: result
+   V
+  kernel masquerading
+      Return result back to application
+
+
+BPROC_FWD_SIG
+  This forwards a signal that was received by a ghost.  We assume that
+  all permission checks have been passed since a signal was successfully
+  delivered to the ghost.
+  kernel ghost
+   |  Receive signal, send msg
+   |
+   |  Send: pid, signal
+   V
+  master daemon
+   |  Use pid to determine which slave to send to.
+   |  Simple forward to appropriate slave
+   V
+  slave daemon
+      Perform kill(pid,sig) as root
+
+
+BPROC_EXIT
+  When a masqueraded process exits, it notifies its ghost.
+  masqueraded app
+   |  Perform exit(status) for some reason (could also be signal, etc)
+   V
+  kernel masquerading
+   |  Send exit notification
+   |
+   |  Send: pid, exit_status
+   V
+  slave daemon
+   |  Simple forward to master
+   |
+   |  Send: pid, exit_status
+   V
+  master daemon
+   |  Simple forward to ghost
+   |
+   |  Send: pid, exit_status
+   V  
+  kernel ghost thread
+      Receive exit request, perform exit(ext_status)
+
+
+BPROC_FORK
+  When a masqueraded process forks, a new pid from the master must
+  be allocated for the child.
+  masqueraded app
+   |  Perform fork(2)
+   V
+  kernel masquerading (in the middle of fork(2))
+   |  Build request for new pid
+   |
+   |  Send: ppid
+   V
+  slave daemon
+   |  Simple forward to master
+   |
+   |  Send: ppid
+   V
+  master daemon
+   |  Simple forward to ghost
+   |
+   |  Send: ppid
+   V
+  ghost with pid = ppid
+   |  perform fork(), return child pid.
+   |  ** Request -> Response at this point **
+   |
+   |  Send: child_pid
+   V
+  master daemon
+   |  Make note of the location of the new child pid.
+   |  Simple forward of result
+   |
+   |  Send: child_pid
+   V
+  slave daemon
+   |  Deliver child pid to waiting masqueraded slave process
+   |
+   |  Send: child_pid
+   V
+  masqueraded app + new child
+      Finish fork
+
+
+BPROC_WAIT
+  When masqueraded processes wait for children, we need the ghosts
+  to do the same so that process trees stay in sync.
+  masqueraded app
+   |  perform wait()
+   |
+   V
+  kernel masquerading helpers
+   |  Send message with results of the wait
+   |
+   |  Send: pid, child
+   V
+  slave daemon
+   |  Simple forward to master
+   |
+   |  Send: pid,child
+   V
+  master daemon
+   |  Simple forward to ghost
+   |
+   |  Send: pid,child
+   V
+  ghost process with pid = pid
+      Perform waitpid(child, WNOHANG)
+
+
+TODO:  BPROC_SETUID
+TODO:  BPROC_REPARENT
+TODO?: BPROC_COMMCHG
+
+----------------------------------------------------------------------
+VMADUMP Notes
+----------------------------------------------------------------------
+File format
+
+(VMA = Virtual Memory Area  (see /proc/<pid>/maps for examples))
+
++-------------------+
+| magic             | <- Magic value "VMAD" (Virtual Memory Area Dump)
++-------------------+    0x56 0x4d 0x41 0x44
+| arch (1 byte)     | <-  1 = i386  2 = sparc 
++-------------------+
+| kernel major (1b) | <- Kernel major rev
++-------------------+
+| kernel minor (1b) | <- Kernel minor rev
++-------------------+
+| kernel patch (1b) | <- Kernel patch level
++-------------------+
+| struct vma_header |
++-------------------+
+| vma data          | <- if (vma_header.name_len != 0)
+|                   |       name_len bytes for the filename to mmap from
+                         else
+                            end-start bytes of data from the VMA
++-------------------+
+| struct vma_header | <- there can be 0 or more of these vma_header+data
++-------------------+    sections
+| vma data          |
+|                   |
++-------------------+
+| struct vma_header | <- last VMA header has start=end=~0 to signal end
++-------------------+    of list.  No vma data for this section.
+| struct pt_regs    | <- simple (opaque) register dump
++-------------------+
+| struct mm_info    | <- Other mm info (where brk, args are, etc.)
++-------------------+
+| char comm[16]     | <- store the "comm" element from struct task_struct
++-------------------+
+| sigset_t blocked  | XXX Security issue here?
++-------------------+
+| sigaction_t*_NSIG | <- sigaction's for _NSIG signals.
+|                   |
+
+
++-------------------+
+<eof>
+
+Todo:
+
+
+----------------------------------------------------------------------
+TODO
+----------------------------------------------------------------------
+bproc:
+  * Worry about remote processes doing things like set(e)uid.
+    (These can affect things like signal delivery.)
+  * Locking?  Ummmm yeah.  Note: SMP locking/spinlocks, etc are
+    pretty sketchy in the 2.2.x kernel right now.
+  * Think about pgrp's and sessions.
+  * BPROC_SETUID   Message  
+  * BPROC_REPARENT Message  (to say your parent exited (i.e. getppid()==1)
+
+vma:
+  * Flags to control what parts of a process get dumped.
+    - executable (yes/no)
+    - libraries  (yes/no or list of form "/lib", "/usr/lib", etc)
+  * Better error handling.  (Restore current->mm on load failure?)
+
+----------------------------------------------------------------------
+LOCKS
+----------------------------------------------------------------------
+task->bproc.lock - protects the pointers in task->bproc.  When task !=
+     current, this lock should be grabbed before using these pointers.
+     These pointers are only modified by the task itself.  This lock is
+     needed to keep things safe when one thread is updating another's
+     ghost information.
+
+bproc_ghost_list_t->lock - normal sort of linked list protection.  Grab
+     the lock before reading/writing the linked list.
+     (should be changed to a reader/writer lock?)
+
+bproc_request_queue_t->lock - normal sort of linked list protection.  Grab
+     it before reading/writing the list.
+
+bproc_masq_master_t->lock - normal sort of linked list protection for the
+     process list.  Grabbing it also guarantees that the master isn't going
+     to disappear out from under you.
+
+
+
+
+
+
+Slave move:
+
+
+JOIN
+FORK
+EXIT
+WAIT
+
+
+
+
+
+
+
+Current Join sequence:
+
+Setup listen socket
+Set ghost pointer.
+Send JOIN message
+Accept connection/send process info. (can fail)
+Recv JOIN response
+Pass off IO forwarding stuff.
+Ghost Loop
+
+
+
+
+
+Requirements
+
+1  Want JOIN to go out *after* getting on ghosts lists because the
+   remote side doesn't know if a join is complete or not and may send
+   back requests (signals, exit, etc) BEFORE sending back a JOIN
+   response.  What message can a remote side produce?  Really?
+   
+
+2  Want NEW_GHOST messages to be received on the remote end before
+   the new proc returns to user space.
+
+3  Want NEW_GHOST messages out before any proc manages to see that its
+   parent has its ghost pointer set.
+
+
+Setup listen socket.
+
+1: Create new ghost structure and add it to the ghost list.  Keep
+   pointer around.  Do not set current->bproc.ghost yet.
+
+2: Setup sockets to listen.
+
+3: Send JOIN Message
+
+4: Wait for either connection or join response
+   4.1:  If got join response
+         4.1.1  Remove ghost from lists
+         4.1.2  Close sockets.
+         4.1.3  bailout
+
+5: Send process data
+
+6: Wait for JOIN response
+
+7: Send child process information / set current->bproc.ghost
+   7.1 grab tasklist_lock
+       for each child:
+           grab current->bproc.lock
+           current->bproc.ghost = blah
+           send child NEW_GHOST msg
+           release current->bproc.lock
+       release tasklist_lock
+
+send process info / Check for early JOIN response
+Wait for JOIN response
+
+
+
+
+Send PLACE_GHOST messages.
+
+
+
+
+Send JOIN message.
+
+
+
+  Send JOIN message
+  Send NEW_GHOST messages.
+}
+
+
+Accept connection/send process info. (can fail)
+Recv JOIN response
+Pass off IO forwarding stuff.
+Ghost Loop
+
+
+do_exit
+  if have ghost gen exit message.              
+                                             send proc message w/ state
+                                             parent->bproc.ghost = blah
+  update state.
+
+ * Missing remote status update.
+
+
+do_exit
+  update state.
+                                             send proc message w/ state
+                                             parent->bproc.ghost = blah
+  if have ghost gen exit message.              
+
+ 
+ * Duplicate remote status update?
+
+
+
+
+
+In PROC
+
+make status change                           Set Ghost
+Check for ghost                              Read Status
+
+
+
+
+GHOST Handling
+
+UNghost
+
+remove self from ghost list
+close  own request queue
+
+
+MASQ JOIN:
+
+
+
+again:
+  check if pids exist
+  mpid exists:
+    try and get ghost
+    got ghost:
+
+    no ghost:
+      goto again
+
+
+  mpid does not exist:
+    fork
+    
+
+
+
+JOIN:
+
+  get ghost
+  if ok then
+    append join message
+    if ok then return
+
+  fork (parent return, child continues)
+  while forever
+    create ghost
+    if ok
+      recv process
+      /* Not reached */
+    
+    /* Try again to find the ghost that's blocking us. */
+    get ghost
+      if ok then
+        append join message
+        if ok then silent exit
+
+    /* We're being thwarted
+    wait on ghost list
+
+
+
+  create ghost
+  if already exists 
+  
+  
+
+
+again:
+  get ghost
+  if ok then
+    append join message
+    if ok then
+      if forked then
+        silent exit
+      exit
+
+  fork / create ghost
+  if already exists goto again;
+
+  
+
+---------------------------------------------------------------------------
+Ponderables
+---------------------------------------------------------------------------
+
+Is simultaneous ghostification + masqization really necessary?
+
+-> Ghosts need to be put on a list.  The main "master" list for non masq'ed
+   ghosts will be wrong for these ghosts.
+
+-> Can we just 
+
+
+
+
+------------
+1/5/2000
+Outstanding bugs:
+
+ setpgid(0,0) doesn't work.  Pid mapping is in the wrong place...
+ This will be reimplemented as a remote syscall.  (pgid's?)
+
+ kill to process groups and sessions is busted right now.
+

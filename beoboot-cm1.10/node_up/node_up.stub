@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# This shell script is called automatically by BProc to perform any
+# steps necessary to bring up the nodes.  This is just a stub script
+# pointing to the program that does the real work.
+#
+# $Id: node_up.stub,v 1.3 2003/11/12 23:30:59 mkdist Exp $
+
+if [ -x /usr/lib64/beoboot/bin/node_up ] ; then
+    exec /usr/lib64/beoboot/bin/node_up $*
+else
+    exec /usr/lib/beoboot/bin/node_up $*
+fi
+
+# If we reach this point there's an error.
+bpctl -S $* -s error
+exit 1
+
+# If you want to put more setup stuff here, make sure do replace the
+# "exec" above with the following:
+# /usr/lib/beoboot/bin/node_up $* || exit 1

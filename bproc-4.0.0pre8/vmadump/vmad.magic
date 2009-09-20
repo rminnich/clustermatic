@@ -1,0 +1,24 @@
+#------------------------------------------------------------------------------
+# vmad:  file(1) magic for Beowulf VMAD files
+# Erik Arjan Hendriks <erik@hendriks.cx>
+#
+# $Id: vmad.magic,v 1.5 2002/01/29 04:51:01 mkdist Exp $
+0	string		VMAD		VMADump (old)
+>4	byte		1		i386
+>4	byte		2		sparc
+>4	byte		3		alpha
+>4	byte		4		ppc
+>5	byte		x		kernel %d.
+>6	byte		x		\b%d.
+>7	byte		x		\b%d
+
+0	string		VMA		VMADump
+>3	byte		x		version %d
+>4	byte		1		i386
+>4	byte		2		sparc
+>4	byte		3		alpha
+>4	byte		4		ppc
+>5	byte		x		kernel %d.
+>6	byte		x		\b%d.
+>7	byte		x		\b%d
+>8	string		>\0		(%s)

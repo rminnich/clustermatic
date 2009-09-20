@@ -1,0 +1,315 @@
+<!-- $Id: monte.sgml,v 1.3 2001/08/01 20:27:05 mkdist Exp $ -->
+<!doctype linuxdoc system>
+
+<article>
+
+<title>Two Kernel Monte (Linux loading Linux on x86)
+<author>Erik Hendriks, <tt>
+   <htmlurl url="mailto:hendriks@lanl.gov" name="hendriks@lanl.gov"></tt>;
+<date>vcm1.10, 6 May 2000
+
+<abstract>
+Two Kernel Monte is a kernel module which allows Linux to load another
+kernel image into RAM and restart the machine from that kernel.  The
+loader supports initial ram disks and passing arbitrary kernel command
+line parameters to the new kernel.  This version supports Linux 2.2.x
+and Linux 2.3.x.
+</abstract>
+
+<sect>Downloading
+<p>
+Monte is available on the web at the following location
+<itemize>
+<item>Web page: <htmlurl url="http://www.scyld.com/software/monte.html"
+               name="http://www.scyld.com/software/monte.html">
+<item>Source: <htmlurl url="ftp://ftp.scyld.com/pub/monte/monte-cm1.10.tar.gz"
+  name="ftp://ftp.scyld.com/pub/monte/monte-cm1.10.tar.gz">
+<!-- RPM for use with beo kernels one of these days... -->
+</itemize>
+
+<sect1>Redistribution
+<p>
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+<p>
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+<p>
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+<sect>Usage
+
+<sect1>Building
+
+<p>2 kernel Monte consists of two parts.  A kernel module (`kmonte.o')
+and a user space utility to interface with the kernel module
+(`monte').
+
+<p>Building can be done by running <tt/make/.  The Makefile presumes
+that the Linux source tree you wish to build against is in
+<tt>/usr/src/linux</tt>.  If this is not the case, add
+<tt>LINUX=/path/to/src</tt> on the <tt/make/ command line.
+
+<p>You may install monte via <tt/make install/.
+
+
+<sect1>Kernel Module
+
+<p>The monte kernel module may be installed via <tt/insmod kmonte.o/.
+The following arguments exist:
+
+<descrip>
+<tag/skip_setup/There is a section of code executed in real_mode
+before the kernel switches to protected mode and uncompresses itself.
+This is the setup code from <tt>arch/i386/boot/setup.S</tt> and video
+detection code from <tt>arch/i386/boot/video.S</tt>.  Monte normally
+returns all the way to real mode and transfers control to the
+beginning of the setup code.
+<p>
+If this argument is set to 1, monte will skip the setup section and
+jump straight to protected mode kernel code without ever leaving
+protected mode.
+<p>
+Running monte in its default mode is preferable since the setup code
+performs some important functions like video detection/initialization
+and APM bios initialization.
+</descrip>
+
+
+<sect1><bf>monte</bf> invocation
+
+<p>
+<bf>monte</bf> [-h] [-v] [-i initrd] kernelimage [commandline ...]
+
+<p>
+<bf>monte</bf>
+requires one argument which is the kernel image file to be loaded.  If
+a file named `-' is given, the kernel image will be read from
+standard in.  All remaining arguments will be concatenated and passed
+to the kernel as the kernel command line.
+
+<p>
+<descrip>
+<tag/-h/Print a usage message on standard output and exit.
+<tag/-v/Print version information on standard output then exit.
+<tag/-i initrd/Load the initial ramdisk image stored in initrd. If a
+file named `-' is given, the initial ram disk image will be read from
+standard in.
+</descrip>
+
+<p>The kernel module must be loaded before monte can work.  It cannot
+be automatically loaded via the kernel auto loading mechanisms.
+Running monte is similar to <tt>/sbin/reboot -f</tt>.  You should
+unmount (or remount read-only) and sync all your file systems before
+using monte.
+
+<sect1>Limitations
+
+<sect2>SMP
+
+<p>Kernel monte currently does not support restarting machines running
+SMP kernels.  This does not mean you cannot load a SMP kernel image
+with monte.  It just means that you must be running a uniprocessor
+kernel for monte to work.  SMP support may appear in the future.
+
+<sect2>Loadlin
+
+<p>I have received reports of monte failing on machines which were
+originally booted with loadlin.  This is likely due to DOS (or
+possibly loadlin) modifying the real mode execution environment to the
+point where the operations attempted by the kernel setup code will
+fail.  Using the skip_setup option may work around this problem.
+
+<sect>Technical Description / Implementation
+
+<p>This section contains a technical description of the internals of
+the monte kernel module.  This covers issues specific to loading
+another Linux kernel on top of a running Linux kernel.  For general
+information about loading and running kernel images see the excellent
+technical documentation included with the LILO package.
+
+<p>monte will load an ordinary kernel image as produced by <tt>make
+bzImage</tt>.  The setup code at the beginning of these kernels
+expects to get executed in a real mode environment.  Kernel monte
+switches back to real mode before transferring control to the new
+kernel.
+
+<sect1>Syscall interface
+
+<p>The system call interface overloads the reboot system call.  The
+reboot system call takes two magic numbers, a flag to indicate the
+type of reboot and a pointer argument.  Monte uses different magic
+numbers to distinguish itself from other reboot calls.
+
+<verb>
+#define MONTE_MAGIC_1 0xdeaddead
+#define MONTE_MAGIC_2 0xdeaddead
+struct monte_param_t {
+    char *command_line;
+    int   kernel_fd;
+    int   initrd_fd;
+};
+</verb>
+
+Monte currently ignores the flag argument to reboot.  It should be set
+zero.  The pointer is a pointer to a <tt>struct monte_param_t</tt>.
+<tt>command_line</tt> is the command line to pass to the new kernel.
+<tt>kernel_fd</tt> is the file descriptor of a kernel image.  Monte
+will attempt to read a kernel image from this file descriptor.  The
+file descriptor does not need to be a regular file.  Any file
+descriptor which supports read will do.  The file descriptor should
+not be non-blocking.  <tt>initrd_fd</tt> is the file descriptor of the
+initial ram disk image to be loaded.  The requirements for this file
+descriptor are the same as for <tt>kernel_fd</tt> except that
+<tt>initrd_fd</tt> may be -1 if there is no initial ram disk to be
+loaded.
+
+<sect1>Semi-detailed sequence of events during restart
+
+<p>
+<descrip>
+<tag/Load the kernel image and initrd into memory/
+  Since we cannot load the data its final physical destination, we
+  load it elsewhere and move it later on.  (See <ref id="mman"
+  name="Memory Management">)
+<tag/Obtain an identity mapped page./To avoid instantly
+  self-destructing once turning off paging, we need to run in an
+  identity mapped page.  Since we know it's free and out of the way,
+  we map physical page zero at address 0.
+<tag/If skip_setup==0 (the default) Restore the XT PIC./This remaps
+  the hardware interrupt numbers to the interrupt vectors where the
+  BIOS expects them.
+<tag/Copy code and GDT into the identity mapped page./ Copy the switch
+  code the page we just mapped.  The GDT we will be using needs to go
+  there as well.  We copy to the end of page zero since the beginning
+  of page zero has interrupt vectors and BIOS variables.
+<tag/Install a new GDT and IDT and jump to the code we just copied into page zero./
+  The code involved is part of our kernel module and needs to be
+  relocated to the right spot.  This is a simple memcpy().
+<tag/Turn off paging./This is step one on the path to real mode.
+  After doing this we don't have worry about overwriting our page
+  tables anymore.  This was our last dependency on the old kernel.
+  We're on our own now.
+<tag/Relocate loaded data./Now that paging is turned off we can
+  memcpy all our data to its final destination.  Walk the descriptor
+  list passed to us to do this.
+<tag/If skip_setup==0 (the default)/
+  <descrip>
+  <tag/Turn off protection/Once memory protection is turned off we are
+    in real mode.  Before doing so we have to initialize the segment
+    registers with reasonably configured segments.
+  <tag/Restore video hardware/The Linux kernel leaves the VGA hardware
+    in a somewhat strange state.  Monte restores the video hardware by
+    asking the video BIOS to set the video mode to 80x25 text mode.
+  <tag/Jump to the kernel/The kernel has been loaded and the machine
+    is ready so enable interrupts and jump to the kernel code.
+  </descrip>
+<tag/If skip_setup==1/
+  <descrip>
+    <tag/Jump to new kernel./Since the GDT we've installed matches
+      what the kernel expects, we can safely jump to the new kernel at
+      this point.
+  </descrip>
+</descrip>
+
+<sect1>Memory Management<label id="mman">
+
+<p>Loading kernel images presents a unique memory management problem
+in Linux.  In order to start a kernel correctly, it needs to get
+loaded in one contiguous physical chunk at a specific address in
+memory.  There is also kernel setup information such as the kernel
+command line and and other parameters that need to be loaded at
+specific physical addresses.
+
+<p>In general, it is impossible to allocate several megabytes of
+memory in a single contiguous chunk.  Even if it were possible, it is
+doubtful that you could even find a single chunk large enough after a
+system has been running for a while.  Therefore we are forced to load
+the kernel and initial ram disk images into many non-contiguous pages
+and move them to their final destinations later on.
+
+<p>During the load process, monte maintains a list of pages it has
+allocated and their ultimate physical destinations.  Given a physical
+address, the memory management system will return a virtual address
+where data may be written for that physical address.  The interface is
+as follows:
+
+<verb>
+void *m_get_addr_phys(unsigned long addr);
+</verb>
+
+<p>The address returned from this function points into an aligned page
+of memory.  The pointer is only good until the end of that page.  Any
+of the pages could move when another call to <tt/m_get_addr_phys/ is
+made.  Therefore the pointer returned should only be considered valid
+until the next call to m_get_addr_phys.
+
+<p>Page lists are stored in a linked list of the following structures.
+
+<verb>
+struct monte_indirect_t {
+    unsigned long dest;
+    unsigned long src;
+    unsigned long size;
+    struct monte_indirect_t *next;
+};
+</verb>
+
+<p>The relocations of memory blocks are done during the switch back to
+real mode after we have turned off paging but before we turn off
+protection.  Once paging is turned off we no longer have any concerns
+about overwriting important parts of the kernel (such as page tables).
+Since we are still running in a 32-bit segment in protected mode we
+can still access all of the memory in the machine without any
+problems.
+
+<p>The memory block moving code is very simple minded and short (13
+instructions).  It will blindly walk down the list and perform the
+memcpy()s.  Therefore, when setting up these lists we have to make
+sure that no memcpy()s conflict in any way and also that we don't ever
+overwrite the pages containing the lists.  These problems are handled
+at page allocation time.
+
+<p>When we allocate pages we have know where we would like that page
+to reside in the end.  Whenever a new page is allocated the list of
+previously allocated pages is checked to see there is another page
+whose destination address is the address just got.  If so, that page
+is moved to its final destination and the page that it previously
+occupied is returned.
+
+<sect>Change Log
+
+<p>
+<descrip>
+
+<tag/0.3.1/Fixed a bug loading ram disks on some machines with large
+  amounts of memory.
+
+<tag/0.3.0/Added interrupt controller (XT-PIC) restore code and video
+  restore code.  Adding the interrupt controler restore code cleared
+  up the issues on AMD so Monte once again returns to real mode by
+  default.
+
+<tag/0.2.0/After seeing failures to return to real mode on AMD's code
+  was changed to try and stay in protected mode skipping the setup
+  portion of the kernel.
+
+<tag/0.1.0/Initial release.
+</descrip>
+
+<sect>Credits
+
+<p>I would like to thank the <htmlurl
+url="http://www.acl.lanl.gov/linuxbios/" name="Linux BIOS project">
+for convincing me that this was actually possible and thereby
+prompting me to actually do it.
+
+<p>The switch to real mode code is modeled after similar code (for
+rebooting) in the Linux kernel.
+</article>

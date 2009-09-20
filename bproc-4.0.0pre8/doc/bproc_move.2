@@ -1,0 +1,44 @@
+.\" $Id: bproc_move.2,v 1.3 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_MOVE 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+
+.SH NAME
+bproc_move \- move the calling process to another node
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_move\fR(int \fInode\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_move\fR will move the current process to the remote node
+given by \fInode\fR.
+
+Process migration in BProc is not transparent.  Migration is
+accomplished by making a copy of all the program's memory regions and
+recreating the memory space on the remote node.  All open files are
+closed during migration.
+
+.SH RETURN VALUE
+.PP
+On  success,  zero  is returned.  On error, \-1 is returned
+and errno is set appropriately.
+
+.SH ERRORS
+.TP
+\fBEPERM\fR
+The process does not have permission to move to node.
+.TP
+\fBELOOP\fR
+The process is already running on \fInode\fR.
+.TP
+\fBEINVAL\fR
+\fInode\fR is an invalid node number or \fInode\fR is down.
+.TP
+\fBEBUSY\fR
+The BProc system is not running.
+
+.SH SEE ALSO
+.PP
+\fBbproc_rfork\fR(2),
+\fBbproc_execmove\fR(2)

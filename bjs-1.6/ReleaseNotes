@@ -1,0 +1,49 @@
+1.6 ------------------------------------------------------------------------
+
+This is a bug fix release.  See the ChangeLog for details.
+
+1.5 ------------------------------------------------------------------------
+
+This release adds the "JOBID" environment variable and a bunch of bug fixes.
+
+1.2 ------------------------------------------------------------------------
+This version of BJS should be used with BProc version 3.2.1 or later.
+This version of BJS requires cmtools version 1.1+ to build.
+
+This release is just an update to deal with a newer version of cmtools.
+
+1.1 ------------------------------------------------------------------------
+
+This version of BJS should be used with BProc version 3.2.1 or later.
+
+This version of BJS is a major cleanup from version 1.0.  The security
+concerns of version 1.0 *SHOULD* be addressed in this version.  This
+version also features pluggable policy modules.
+
+This version is still lacking in documentation and policy features.
+It's being released now so people can play with it.
+
+
+1.0 ------------------------------------------------------------------------
+
+This is the first public release of BJS.  BJS is a simple/efficient
+scheduler for clusters running BProc.
+
+--- WARNING --- WARNING --- WARNING --- WARNING --- WARNING --- WARNING ---
+THIS IS NOT PRODUCTION QUALITY CODE.  THERE ARE ALMOST CERTAINLY SEVERE
+SECURITY HOLES IN THIS SYSTEM.  SINCE THE BJS SERVER MUST RUN AS ROOT, IT
+IS LIKELY THAT ANY SUCH HOLES CAN/WILL LEAD TO ROOT COMPROMISE.
+--- WARNING --- WARNING --- WARNING --- WARNING --- WARNING --- WARNING ---
+
+Ok, got that out of the way.  Normally, I wouldn't call code like this
+version 1.0 but there are political reasons for doing so.  This code
+is being released in this state so that people willing to work with
+something that's not 100% finished or secure will have something to
+work with.  I hope that those people will also help us get this
+scheduler into a production ready state.
+
+Please note that the student who wrote this code (Paul Ruth)
+
+
+
+

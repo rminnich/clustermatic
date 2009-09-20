@@ -1,0 +1,25 @@
+.\" $Id: bproc_pidnode.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_PIDNODE 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_pidnode \- return the node that a process exists on
+
+.SH SYNOPSIS
+\fB#include <sys/bproc.h>\fR
+
+int \fBbproc_pidnode\fR(int \fIpid\fR);
+
+.SH DESCRIPTION
+.PP
+\fBbproc_pidnode\fR returns the node number that
+\fIpid\fR is exists on or BPROC_NODE_MASTER if \fIpid\fR
+is on the front end.  If a process ID doesn't exist,
+\fBbproc_pidnode\fR will return BPROC_NODE_MASTER.
+
+.SH ERRORS
+.PP
+None.
+
+.SH SEE ALSO
+.PP
+\fBbproc_proclist\fR(2),
+

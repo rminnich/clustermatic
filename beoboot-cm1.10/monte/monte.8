@@ -1,0 +1,47 @@
+.TH MONTE 8 "Scyld Cluster Utilites" "SCC" \" -*- nroff -*-
+.SH NAME
+monte \- Load a new kernel and restart the system.
+.SH SYNOPSIS
+.B monte
+[\-h] [\-v] [\-n] [\-d] [\-s] [\-i initrd] kernelimage [commandline...]
+.SH DESCRIPTION
+.B monte 
+loads a kernel image and optionally an initial ram disk image into ram
+and restarts the system using that kernel. This man page documents
+version cm1.10 of
+.B monte\fR.
+This requires that the monte kernel module `kmonte.o' be loaded.
+.B monte
+is a user level interface to the kernel module.
+
+.SS OPTIONS
+.B monte
+requires one argument which is the kernel image file to be loaded.  If
+a file named `\-' is given, the kernel image will be read from
+standard in.  All remaining arguments will be concatenated and passed
+to the kernel as the kernel command line.
+.TP
+.I "\-h"
+Print a usage message on standard output and exit.
+.TP
+.I "\-v"
+Print version information on standard output then exit.
+.TP
+.I "\-s"
+Skip setup.  This will cause the new kernel to be started in protected
+mode past the setup code.  The default behavior is to start the new
+kernel at the beginning in real mode.
+.TP
+.I "\-d"
+Disable PCI bus masters.
+.TP
+.I "\-n"
+Do everything except actually restarting the system.  (For testing purposes.)
+.TP
+.I "\-i initrd"
+Load the initial ramdisk image stored in initrd. If a file named `\-'
+is given, the initial ram disk image will be read from standard in.
+
+.SH BUGS
+Send bug reports to \fIhendriks@lanl.gov\fR
+

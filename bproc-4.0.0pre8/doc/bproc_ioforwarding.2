@@ -1,0 +1,84 @@
+.\" $Id: bproc_ioforwarding.2,v 1.1 2004/09/08 20:28:44 mkdist Exp $
+.TH BPROC_IOFORWARDING 2 "" "BProc 4.0.0pre8" "BProc Programmer's Manual"
+.SH NAME
+bproc_iofowarding \- BProc I/O forwarding facilities
+
+.SH DESCRIPTION
+.PP
+When a process moves to a remote node it loses all its open files.  In
+cases where a single remote process is created, that process's STDOUT
+and STDERR will be combined and connected to whatever STDOUT was on
+the calling process.  This is basically a hack 
+
+NOTE: If STDOUT is connected to a tty, it won't appear to be to the
+remote process.  This will affect things like the standard C library
+I/O routines which buffer differently based on what they're connected
+to.
+
+BProc provies a facility to setup file descriptors for the remote
+process after migration is complete.  This is passed in as a list of
+file descriptors and what to connect them to.  Each descriptor is
+described by a \fBstruct bproc_io_t\fR.  The structure is defined as
+follows:
+
+.nf
+struct bproc_io_t {
+    int fd;
+    short type;
+    short flags;
+    union {
+        struct sockaddr addr;
+        struct {
+            int   flags;
+            int   mode;
+            long  offset;
+            char  name[256];
+        } file;
+    } d;
+};
+.fi
+
+The \fBbproc_move\fR, \fBbproc_rfork\fR, \fBbproc_vrfork\fR,
+\fBbproc_execmove\fR and \fBbproc_vexecmove\fR calls have \fB_io\fR
+variants which take a list of \fBstruct bproc_io_t\fR structures.
+
+The \fBfd\fR member is the file descriptor number that the open file
+will be placed on.  The \fBtype\fR member must be one of the following:
+
+.TP
+.B BPROC_IO_FILE
+Connect the file descriptor to a file.  The file is opened using the
+open syscall.  The \fBd.name\fR member is the file name to be opened.
+The \fBd.flags\fR and \fBd.mode\fR members are the flags and mode
+arguments to the open system call.  If \fBd.offset\fR is non-zero,
+BProc will use lseek(2) to seek to that position in the file.
+
+Note that it's possible to open files which are not regular files
+(e.g. /dev/null or /dev/console) and it's possible to create new files
+on the remote node with O_CREAT.
+.TP
+.B BPROC_IO_SOCKET
+Connect the file descriptor to a socket.  The address to stored in
+\fBd.addr\fR.
+
+.PP
+The \fBflags\fR 
+
+.TP
+.B BPROC_IO_SEND_INFO
+
+
+
+.PP
+blah
+
+
+
+.SH SEE ALSO
+.PP
+\fBopen\fR(2),
+\fBlseek\fR(2),
+\fBbproc_execmove\fR(2),
+\fBbproc_vexecmove\fR(2)
+
+

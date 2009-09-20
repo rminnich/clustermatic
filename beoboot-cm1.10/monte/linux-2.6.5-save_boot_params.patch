@@ -1,0 +1,29 @@
+--- linux-2.6.5/arch/i386/Kconfig~	2004-04-03 20:36:25.000000000 -0700
++++ linux-2.6.5/arch/i386/Kconfig	2004-04-23 13:30:52.495810920 -0600
+@@ -847,6 +847,11 @@
+ 	generate incorrect output with certain kernel constructs when
+ 	-mregparm=3 is used.
+ 
++config SAVE_BOOT_PARAMS
++	bool "Save boot params"
++	help
++         This causes the kernel to keep the real mode boot parameter
++         block around.  This is needed by things like two kernel monte.
+ endmenu
+ 
+ 
+--- linux-2.6.5/arch/i386/kernel/setup.c~	2004-04-03 20:37:06.000000000 -0700
++++ linux-2.6.5/arch/i386/kernel/setup.c	2004-04-23 13:26:11.795483856 -0600
+@@ -130,7 +130,12 @@
+ static char command_line[COMMAND_LINE_SIZE];
+        char saved_command_line[COMMAND_LINE_SIZE];
+ 
++#ifdef CONFIG_SAVE_BOOT_PARAMS
++unsigned char boot_params[PARAM_SIZE];
++EXPORT_SYMBOL(boot_params);
++#else
+ unsigned char __initdata boot_params[PARAM_SIZE];
++#endif
+ 
+ static struct resource code_resource = { "Kernel code", 0x100000, 0 };
+ static struct resource data_resource = { "Kernel data", 0, 0 };
