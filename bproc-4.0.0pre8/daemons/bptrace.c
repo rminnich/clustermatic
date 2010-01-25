@@ -322,9 +322,10 @@ void print_message(struct debug_hdr_t *req) {
 		int i;
 		printf(" addr=0x%0*lx bytes=%d",
 		       (int) sizeof(long) * 2, msg->addr, msg->bytes);
+		/* ah fun. Cast depends on architecture type. I really love gcc */
 		for (i=0; i < msg->bytes / sizeof(int) ; i++) 
 		    printf(" %0*lx", (int)sizeof(int)*2,
-			   ((int *)msg->data.data)[i]);
+			   ((long unsigned int *)msg->data.data)[i]);
 	    }
 	    } break;
 	case BPROC_REPARENT: {

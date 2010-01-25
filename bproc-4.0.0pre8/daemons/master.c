@@ -1628,7 +1628,7 @@ int accept_new_slave(struct interface_t *ifc) {
     int slavefd, i, j;
     struct sockaddr_in remote;
 
-    int remsize = sizeof(remote);
+    socklen_t remsize = sizeof(remote);
     slavefd = accept(ifc->fd, (struct sockaddr *) &remote, &remsize);
     if (slavefd == -1) {
 	if (errno == EAGAIN) return 0;
