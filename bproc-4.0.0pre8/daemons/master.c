@@ -1347,7 +1347,7 @@ void run_node_up(struct node_t *s) {
 	    close(fd);
 	}
 	sprintf(arg, "%d", s->id);
-	execl(node_up_script, node_up_script, arg, 0);
+	execl(node_up_script, node_up_script, arg, (char *)NULL);
 	if (errno == ENOENT)
 	    exit(0); /* No script, ok. */
 	else
