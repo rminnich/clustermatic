@@ -17,8 +17,6 @@ bptrace.o: bptrace.c list.h debug.h ../kernel/bproc.h \
 cmconf.o: cmconf.c list.h cmconf.h
 db.o: db.c ../kernel/bproc.h ../clients/sys/bproc_common.h \
   ../clients/sys/bproc.h
-iod.o: iod.c ../kernel/bproc.h ../clients/sys/bproc_common.h \
-  ../clients/sys/bproc.h
 master.o: master.c ../kernel/bproc.h ../clients/sys/bproc_common.h \
   ../clients/sys/bproc.h list.h cmconf.h messages.h debug.h
 slave.o: slave.c list.h ../kernel/bproc.h ../clients/sys/bproc_common.h \
@@ -28,16 +26,16 @@ slave.o: slave.c list.h ../kernel/bproc.h ../clients/sys/bproc_common.h \
 bptrace: bptrace.o
 	$(CC) -o $@ $^ 
 
-bpmaster: master.o iod.o cmconf.o
+bpmaster: master.o cmconf.o
 	$(CC) $^ -o bpmaster
-bpslave: slave.o iod.o
+bpslave: slave.o 
 	$(CC) $^ -o bpslave
 
-libbpslave.a: slave.o iod.o
+libbpslave.a: slave.o
 	objcopy --redefine-sym main=slave_main \
 		--redefine-sym .main=.slave_main \
 		slave.o lslave.o
-	ar rcs $@ lslave.o iod.o
+	ar rcs $@ lslave.o 
 	rm -f lslave.o
 
 install: $(ALL)

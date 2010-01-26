@@ -117,6 +117,14 @@ enum c_state {
 	CONN_DEAD		/* Dead, needs to be cleaned up */
 };
 
+/* fd type */
+enum fd_type {
+	CLIENT_CONNECT = 0,
+	CLIENT,
+	SLAVE_CONNECT,
+	SLAVE,
+};
+	
 #define IBUFFER_SIZE (sizeof(struct bproc_message_hdr_t) + 64)
 
 struct conn_t {
@@ -143,6 +151,8 @@ struct conn_t {
 	struct request_t *oreq;
 };
 
+struct conn_t *connections;
+
 #define conn_out_empty(x) (!(x)->oreq)
 
 struct node_t {
@@ -167,8 +177,6 @@ struct assoc_t {
 	void *req_id;		/* Request ID of move in progress */
 	struct node_t *req_dest;	/* Outstanding request destination */
 };
-
-extern int start_iod(void);
 
 struct interface_t {
 	char *name;
@@ -215,7 +223,8 @@ static struct config_t conf;
  * portability, since we don't need the kernel module any more
  */
 struct client_t {
-	struct request_t *ghost_reqs;
+	int active;
+	struct request_t requests;
 };
 
 static struct client_t *clients;
@@ -236,12 +245,13 @@ static int epoll_fd;
 #define MAXPID 32768
 static struct assoc_t associations[MAXPID];
 /*static struct request_t *ghost_reqs = 0;*/
-static LIST_HEAD(ghost_reqs);
+//static LIST_HEAD(ghost_reqs);
 
 /* Global configuration stuff */
 static int verbose = 0;
 static char *node_up_script = DEFAULT_NODE_UP_SCRIPT;
 static char *machine_config_file = DEFAULT_CONFIG_FILE;
+static int maxfd = -1;
 
 static struct bproc_version_t version =
     { BPROC_MAGIC, BPROC_ARCH, PACKAGE_MAGIC, PACKAGE_VERSION };
@@ -250,7 +260,7 @@ static void remove_slave(struct node_t *s, struct conn_t *c);
 static void remove_slave_connection(struct conn_t *conn);
 static LIST_HEAD(conn_dead);	/* list of dead connections which need to be cleaned up. */
 
-static void send_msg(struct node_t *s, struct request_t *req);
+static void send_msg(struct node_t *s, int clientfd, struct request_t *req);
 static void slave_next_connection(struct node_t *s);
 
 #define REQUEST_QUEUE(dest) ((dest) ? (dest)->reqs : ghost_reqs)
@@ -506,7 +516,7 @@ int setup_listen_socket(struct interface_t *ifc)
 	ifc->fd = fd;
 
 	ev.events = EPOLLIN;
-	ev.data.ptr = (void *)1L;
+	ev.data.ptr = (void *)SLAVE_CONNECT;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ifc->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
 		       strerror(errno));
@@ -1091,6 +1101,8 @@ void setup_fdsets(int size)
 		exit(1);
 	}
 
+	maxfd = rlim.rlim_cur;
+
 	if (rlim.rlim_cur < size) {
 		if (rlim.rlim_max < size)
 			rlim.rlim_max = size;
@@ -1099,7 +1111,8 @@ void setup_fdsets(int size)
 			syslog(LOG_CRIT,
 			       "Failed to increase RLIMIT_NOFILE to %ld/%ld",
 			       (long)rlim.rlim_cur, (long)rlim.rlim_max);
-		}
+		} else
+			maxfd = size;
 	}
 }
 
@@ -1167,6 +1180,22 @@ struct node_t *find_node_by_number(int n)
 	if (n < 0 || n >= conf.num_ids)
 		return 0;
 	return conf.node_map[n];
+}
+
+
+/**------------------------------------------------------------------------
+ **  Functions to manage our associations of pids with clients
+ **----------------------------------------------------------------------*/
+
+void
+client_init(void)
+{
+	clients = calloc(maxfd, sizeof(*clients));
+	if (! clients) {
+		syslog(LOG_CRIT, "FATAL: client_init: allocate failed");
+		assert(0);
+	}
+
 }
 
 /**------------------------------------------------------------------------
@@ -1249,7 +1278,7 @@ void assoc_purge_proc(struct assoc_t *a)
 	msg->stime = 0;
 	msg->cutime = 0;
 	msg->cstime = 0;
-	send_msg(0, req);
+	send_msg(0, a->client, req);
 
 	assoc_clear_proc(a);
 }
@@ -1667,7 +1696,7 @@ void slave_new_connection(struct node_t *s, struct interface_t *ifc,
 	if (s->status == 0)
 		s->cookie = cookie_seq++;
 
-	conn = smalloc(sizeof(*conn));
+	conn = &connections[fd];
 	conn->node = s;
 	conn->fd = fd;
 	conn->state = CONN_NEW;
@@ -1688,7 +1717,7 @@ void slave_new_connection(struct node_t *s, struct interface_t *ifc,
 
 	/* Add this FD to our world */
 	ev.events = 0;
-	ev.data.ptr = conn;
+	ev.data.ptr = (void *)SLAVE;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
 		       strerror(errno));
@@ -2020,7 +2049,9 @@ int route_message(struct request_t *req)
 			default:
 				/* there's probably nothing that falls in here (?) */
 				/*list_add_tail(&req->list, &ghost_reqs); */
-				send_msg(0, req);
+				//send_msg(0, req);
+				syslog(LOG_ERR,
+			       "Received BPROC_ROUTE_NODE but not sure what to do yet");
 			}
 		} else {
 			node = find_node_by_number(hdr->to);
@@ -2041,19 +2072,20 @@ int route_message(struct request_t *req)
 			if (fromassoc)
 				fromassoc->req_dest = node;
 			/*list_add_tail(&req->list, &node->reqs); */
-			send_msg(node, req);
+			send_msg(node, -1, req);
 		}
 		break;
 	case BPROC_ROUTE_REAL:
 		assoc = assoc_find(hdr->to);
 		if (fromassoc)
 			fromassoc->req_dest = assoc->proc;
-		send_msg(assoc->proc, req);
+		send_msg(assoc->proc, -1, req);
 		break;
 	case BPROC_ROUTE_GHOST:
+		/* no idea yet. */
 		if (fromassoc)
 			fromassoc->req_dest = 0;
-		send_msg(0, req);
+		//send_msg(0, req);
 		break;
 	default:
 		syslog(LOG_ERR, "Unknown totype in route_message(): %d\n",
@@ -2064,31 +2096,69 @@ int route_message(struct request_t *req)
 }
 
 static
-void ghost_update_epoll(void)
+int bytesavail(int fd)
 {
+	size_t ret;
+	if (ioctl(fd, FIONREAD, &ret) < 0)
+		return -1;
+
+	return ret;
+}
+
+static
+void client_update_epoll(int fd)
+{
+	struct client_t *client = &clients[fd];
 	struct epoll_event ev;
 	ev.events = EPOLLIN;
-	if (!list_empty(&ghost_reqs))
+	if (!list_empty(&client->requests.list))
 		ev.events |= EPOLLOUT;
-	ev.data.ptr = 0;
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, clientconnect, &ev)) {
+	ev.data.ptr = (void *)CLIENT;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD): %s",
 		       strerror(errno));
 		exit(1);
 	}
 }
 
+static
+int accept_new_client(void)
+{
+	int clientfd;
+	struct sockaddr_in remote;
+
+	socklen_t remsize = sizeof(remote);
+	clientfd = accept(clientconnect, (struct sockaddr *)&remote, &remsize);
+	if (clientfd == -1) {
+		if (errno == EAGAIN)
+			return 0;
+		syslog(LOG_ERR, "accept: %s", strerror(errno));
+		return -1;
+	}
+
+	if (verbose)
+		syslog(LOG_INFO, "connection from %s", ip_to_str(&remote));
+
+	set_no_delay(clientfd);
+	set_non_block(clientfd);
+
+	clients[clientfd].active = 1;
+	INIT_LIST_HEAD(&clients[clientfd].requests.list);
+	return 0;
+}
+
 /* "ghost" is a little dated in this function name. */
 static
-void read_ghost_request(void)
+void read_client_request(int fd)
 {
+	struct client_t *client = &clients[fd];
 	int r, size;
 	struct request_t *req;
 	void *msg;
 
 	while (1) {
 		/* Get the size of the next message */
-		size = ioctl(clientconnect, BPROC_MSG_SIZE);
+		size = bytesavail(fd);
 		if (size <= 0) {
 			if (size == 0 || errno == EAGAIN)
 				return;
@@ -2100,11 +2170,11 @@ void read_ghost_request(void)
 		req = req_get(size);
 		msg = bproc_msg(req);
 
-		r = read(clientconnect, msg, size);
+		r = read(fd, msg, size);
 		if (r < 0) {
 			if (errno == EAGAIN)
 				return;
-			syslog(LOG_CRIT, "read(ghost): %s", strerror(errno));
+			syslog(LOG_CRIT, "read(client): %s", strerror(errno));
 			return;
 		}
 
@@ -2114,60 +2184,30 @@ void read_ghost_request(void)
 }
 
 static
-void write_ghost_request(void)
+int write_client_request(int fd)
 {
 	int r;
 	struct request_t *req;
 	struct bproc_message_hdr_t *hdr;
+	struct client_t *client = &clients[fd];
 
-	while (!list_empty(&ghost_reqs)) {
-		req = list_entry(ghost_reqs.next, struct request_t, list);
+	while (!list_empty(&client->requests.list)) {
+		req = list_entry(&client->requests.list, struct request_t, list);
 		hdr = bproc_msg(req);
 
 		msgtrace(BPROC_DEBUG_MSG_TO_KERNEL, 0, req);
-		r = write(clientconnect, hdr, hdr->size);
-		if (r == -1) {
-			if (errno == EAGAIN) {
-				return;	/* done here... */
-			} else if (errno == ESRCH) {
-				/* It's possible that someone is trying to send something
-				 * to a process that doesn't exist anymore. */
-				/* Cases where I think this should happen: signal forwarding,
-				 * status requests .. although status requests should never
-				 * show up on this list. */
-				switch (hdr->req) {
-				case BPROC_FWD_SIG:
-				case BPROC_SYS_KILL:
-					/* this is basically a list of interruptible remote
-					 * requests */
-				case BPROC_RESPONSE(BPROC_NODE_CHROOT):
-				case BPROC_RESPONSE(BPROC_NODE_RECONNECT):
-					break;
-				default:
-					syslog(LOG_ERR,
-					       "write(ghost): missing process for message"
-					       " type %d %s; to=%d,%d from=%d,%d result=%ld",
-					       BPROC_REQUEST(hdr->req),
-					       BPROC_ISRESPONSE(hdr->
-								req) ? "resp" :
-					       "req", hdr->totype, hdr->to,
-					       hdr->fromtype, hdr->from,
-					       hdr->result);
-					break;
-				}
-			} else {
-				syslog(LOG_CRIT,
-				       "write(ghost): error %s; req=%d",
-				       strerror(errno), hdr->req);
-			}
-		} else if (r != hdr->size)
+		r = write(fd, hdr, hdr->size);
+		if (r <= hdr->size) {
 			syslog(LOG_CRIT,
 			       "write(ghost): short write; ignoring (Aaaieee!!)");
+			return -1;
+		}
 
 		/* Remove the request from the list and free it */
 		list_del(&req->list);
 		req_free(req);
 	}
+	return 0;
 }
 
 static
@@ -2179,7 +2219,7 @@ void conn_update_epoll(struct conn_t *c)
 		ev.events |= EPOLLIN;
 	if (!conn_out_empty(c))
 		ev.events |= EPOLLOUT;
-	ev.data.ptr = c;
+	ev.data.ptr = (void *)SLAVE;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, c->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD, %d, {0x%x, %p} ): %s",
 		       c->fd, ev.events, ev.data.ptr, strerror(errno));
@@ -2531,7 +2571,7 @@ void conn_write(struct conn_t *c)
 }
 
 static
-void send_msg(struct node_t *s, struct request_t *req)
+void send_msg(struct node_t *s, int clientfd, struct request_t *req)
 {
 	if (s) {
 		list_add_tail(&req->list, &s->reqs);
@@ -2543,8 +2583,8 @@ void send_msg(struct node_t *s, struct request_t *req)
 			conn_update_epoll(s->running);
 		}
 	} else {
-		list_add_tail(&req->list, &ghost_reqs);
-		ghost_update_epoll();
+		list_add_tail(&req->list, &clients[clientfd].requests.list);
+		client_update_epoll(clientfd);
 	}
 }
 
@@ -2610,13 +2650,13 @@ int setup_master_fd(void)
 	set_non_block(clientconnect);
 
 	ev.events = 0;
-	ev.data.ptr = 0;
+	ev.data.ptr = (void *)CLIENT_CONNECT;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientconnect, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
 		       strerror(errno));
 		exit(1);
 	}
-	ghost_update_epoll();
+	client_update_epoll(clientconnect);
 	return 0;
 }
 
@@ -2769,7 +2809,6 @@ int main(int argc, char *argv[])
 
 	if (want_daemonize)
 		daemonize();
-	start_iod();
 
 	{
 		int r;
@@ -2831,16 +2870,19 @@ int main(int argc, char *argv[])
 			/* Block the update signals while doing work. */
 			sigprocmask(SIG_BLOCK, &sigset, 0);
 
+			/* the big IO loop change: The only FDs used to be connections to connections to slaves. No longer. 
+			 * We will have fds for clients and the masterfd for taking new clients connections. 
+			 */
 			for (i = 0; i < r; i++) {
 				struct conn_t *conn;
-				conn = epoll_events[i].data.ptr;
 				if (epoll_events[i].events & EPOLLOUT) {
-					switch ((long)conn) {
-					case 0:
-						write_ghost_request();
-						ghost_update_epoll();
+					switch ((long)epoll_events[i].data.ptr) {
+					case CLIENT:
+						write_client_request(i);
+						client_update_epoll(i);
 						break;
-					default:
+					case SLAVE:
+						conn = &connections[i];
 						if (conn->state == CONN_DEAD)
 							break;
 						conn_write(conn);
@@ -2849,12 +2891,15 @@ int main(int argc, char *argv[])
 					}
 				}
 				if (epoll_events[i].events & EPOLLIN) {
-					switch ((long)conn) {
-					case 0:
-						read_ghost_request();
-						ghost_update_epoll();
+					switch ((long)epoll_events[i].data.ptr) {
+					case CLIENT_CONNECT:
+						accept_new_client();
 						break;
-					case 1:	/* hack hack hack magic value */
+					case CLIENT:
+						read_client_request(i);
+						client_update_epoll(i);
+						break;
+					case SLAVE_CONNECT:
 						conn = 0;
 						for (j = 0;
 						     j < conf.if_list_size; j++)
@@ -2862,7 +2907,8 @@ int main(int argc, char *argv[])
 									 if_list
 									 [j]);
 						break;
-					default:
+					case SLAVE:
+						conn = &connections[i];
 						if (conn->state == CONN_DEAD)
 							break;
 						conn_read(conn);

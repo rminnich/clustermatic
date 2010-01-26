@@ -1442,13 +1442,6 @@ int start_slave(struct master_t *master)
 		}
 
 		p.sched_priority = 1;
-#if 0
-		/* ptrace / sched_yield is messed up in the kernel */
-		if (sched_setscheduler(0, SCHED_FIFO, &p))
-			syslog(LOG_NOTICE,
-			       "Failed to set real-time scheduling for"
-			       " slave daemon.\n");
-#endif
 		select_loop();
 		exit(0);
 	}
@@ -1874,8 +1867,6 @@ int main(int argc, char *argv[])
 	} else {
 		chdir("/");
 	}
-	start_iod();		/* A single IOD for all slaves is fine. */
-
 	signal(SIGPIPE, SIG_IGN);
 	signal(SIGCHLD, SIG_IGN);
 
@@ -1888,52 +1879,6 @@ int main(int argc, char *argv[])
 	syslog(LOG_INFO, "All slaves exited...  manager exiting.");
 	exit(0);
 
-#if 0
-	/* Setup connection... Do this here before daemonizing in case of
-	 * problems. */
-
-	err = slave_setup(&server_addr, &local_addr);
-	if (err && !auto_reconnect)
-		exit(1);
-	while (err) {
-		reset_slave();
-		sleep(RECONNECT_RETRY_INTERVAL);
-		err = slave_setup(&server_addr, &local_addr);
-	}
-
-	logstderr = logstderr || (verbose && !want_daemonize);
-	openlog(argv[0], logstderr ? LOG_PERROR : 0, log_facility);
-	if (want_daemonize == 1 && verbose == 0)
-		daemonize();
-	else
-		chdir("/");
-	start_iod();
-
-	/* Initialize signal state */
-	signal(SIGPIPE, SIG_IGN);
-	signal(SIGCHLD, SIG_IGN);	/* probably unnecessary */
-
-	/* bump our priority to RT to avoid getting hosed by errant
-	 * stuff that gets run on our node */
-	p.sched_priority = 1;
-#if 0
-	/* ptrace / sched_yield is messed up in the kernel */
-	if (sched_setscheduler(0, SCHED_FIFO, &p))
-		syslog(LOG_NOTICE, "Failed to set real-time scheduling for"
-		       " slave daemon.\n");
-#endif
-
-	select_loop();
-	while (auto_reconnect) {
-		syslog(LOG_NOTICE, "Resetting connection.");
-		reset_slave();
-		sleep(RECONNECT_RETRY_INTERVAL);
-		if (slave_setup(&server_addr, &local_addr) == -1)
-			continue;
-		select_loop();
-	}
-	exit(1);
-#endif
 }
 
 /*
