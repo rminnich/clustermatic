@@ -162,10 +162,8 @@ struct node_t {
 };
 
 struct assoc_t {
-    int            oppid, ppid;	/* ppids for PARENT_EXIT handling */
+    int client; /* fd for client that owns this proc */
     struct node_t *proc;	/* Where a process exists */
-    struct node_t *last;	/* Where a process was last (for
-				 * move response routing) */
     unsigned short req;		/* Outstanding request type */
     void          *req_id;	/* Request ID of move in progress */
     struct node_t *req_dest;    /* Outstanding request destination */
@@ -958,7 +956,6 @@ void config_transfer_slaves(void) {
 		    for (l=0; l < MAXPID; l++) {
 			a = &associations[l];
 			if (a->proc == old)     a->proc     = n;
-			if (a->last == old)     a->last     = n;
 			if (a->req_dest == old) a->req_dest = n;
 		    }
 		}
@@ -1052,29 +1049,8 @@ void config_fixup(void) {
 
 static
 int setup_bpfs(void) {
-    int i, *idlist;
-    struct nodeset_init_t ini;
-
-    idlist = malloc(sizeof(*idlist) * conf.num_nodes);
-    if (!idlist) {
-	syslog(LOG_ERR, "Out of memory setting up nodeset.\n");
+	/* in future, we'll have to do bpfs as a FUSE module */
 	return -1;
-    }
-    for (i=0; i < conf.num_nodes; i++)
-	idlist[i] = conf.nodes[i].id;
-
-    ini.node_ct = conf.num_nodes;
-    ini.id_ct   = conf.num_ids;
-    ini.id_list = idlist;
-
-    if (ioctl(ghostfd, BPROC_NODESET_INIT, &ini)) {
-	syslog(LOG_ERR, "nodeset init: %s", strerror(errno));
-	free(idlist);
-	return -1;
-    }
-
-    free(idlist);
-    return 0;
 }
 
 static
@@ -1170,8 +1146,7 @@ void assoc_clear_proc(struct assoc_t *a) {
     /* Zero out this process */
     a->proc = 0;
     a->req  = 0;
-    a->oppid= 0;
-    a->ppid = 0;
+    a->client = -1;
 }
 
 /* This is the violent way to remove a process from BProc's view of
@@ -1266,11 +1241,12 @@ void set_node_state(struct node_t *s, char *state) {
     ss.id = s->id;
     strncpy(ss.state, state, BPROC_STATE_LEN);
 
+#if 0
     if (ioctl(ghostfd, BPROC_NODESET_SETSTATE, &ss)) {
 	syslog(LOG_ERR, "nodeset_set_state(%d, %s): %s\n",
 	       s->id, state, strerror(errno));
     }
-
+#endif
     s->status = strcmp(state, "down") == 0 ? 0 : 1;
 }
 
@@ -1286,12 +1262,12 @@ void set_node_addr(struct node_t *s) {
 	a->sin_addr = s->running->raddr;
     } else
 	memset(&addr.addr, 0, sizeof(addr.addr));
-
+#if 0
     if (ioctl(ghostfd, BPROC_NODESET_SETADDR, &addr)) {
 	syslog(LOG_ERR, "nodeset_setaddr(%d): %s\n",
 	       s->id, strerror(errno));
     }
-
+#endif
     /* This is a bit of a questionable hack right now.  The master can
      * have multiple addresses with slaves at once.  In order to try
      * and do something reasonable for both the simple and complex
@@ -1304,10 +1280,12 @@ void set_node_addr(struct node_t *s) {
 	memset(a, 0, sizeof(*a));
 	a->sin_family = AF_INET;
 	a->sin_addr = s->running->laddr;
+#if 0
 	if (ioctl(ghostfd, BPROC_NODESET_SETADDR, &addr)) {
 	    syslog(LOG_ERR, "nodeset_setaddr(%d): %s\n",
 		   s->id, strerror(errno));
 	}
+#endif
     }
 }
 
@@ -1688,22 +1666,23 @@ int do_move_permission(struct node_t *dest, struct request_t *req) {
     for (i=0; i < mp.ngroups; i++)
 	mp.groups[i] = creds->groups[i];
 
-    return ioctl(ghostfd, BPROC_NODESET_PERM, &mp) == 0;
+    return 1; //ioctl(ghostfd, BPROC_NODESET_PERM, &mp) == 0;
 }
 
 static
 void set_proc_location(struct assoc_t *a, struct node_t *loc) {
     struct setprocloc_t nl;
 
-    a->last = a->proc;
     a->proc = loc;
 
     nl.pid  = assoc_pid(a);
     nl.node = a->proc ? a->proc->id : BPROC_NODE_MASTER;
+#if 0
     if (ioctl(ghostfd, BPROC_SETPROCLOC, &nl)) {
 	syslog(LOG_ERR, "ioctl(BPROC_SETPROCLOC, {%d, %d}): %s",
 	       nl.pid, nl.node, strerror(errno));
     }
+#endif
 
     {				/* debugging spew */
 	/* This is kind of a dummy request to say when process
@@ -1713,7 +1692,6 @@ void set_proc_location(struct assoc_t *a, struct node_t *loc) {
 	msg.hdr.size = sizeof(msg);
 	msg.pid = nl.pid;
 	msg.node = nl.node;
-	msg.last = a->last ? a->last->id : -1;
 	msgtrace(BPROC_DEBUG_OTHER, 0,
 		 ((struct request_t *)&msg)-1);
     }
@@ -1741,126 +1719,14 @@ void respond(struct request_t *req, int err) {
 
 static
 int do_move_request(struct request_t *req) {
-    struct node_t *dest;
-    struct assoc_t *a;
-    struct bproc_move_msg_t *msg;
-
-    msg = bproc_msg(req);
-
-    a = assoc_find(msg->hdr.from);
-
-    if (msg->hdr.to == -1) {
-	dest = 0;
-    } else {
-	dest = find_node_by_number(msg->hdr.to);
-	if (!dest) {
-	    struct request_t *resp;
-	    resp = response(req, -BE_INVALIDNODE);
-	    send_msg(a->proc, resp);
-	    return -1;
-	}
-	if (dest->status == 0) {
-	    struct request_t *resp;
-	    resp = response(req, -BE_NODEDOWN);
-	    send_msg(a->proc, resp);
-	    return -1;
-	}
-    }
-
-    /* Check for moving to same node */
-    if (dest == a->proc) {
-	struct request_t *resp;
-	resp = response(req, -BE_SAMENODE);
-	send_msg(a->proc, resp);
+	/* no */
 	return -1;
-    }
-
-    /* Do a move permission check. */
-    if (dest && !do_move_permission(dest, req)) {
-	struct request_t *resp;
-	resp = response(req, -EPERM);
-	send_msg(a->proc, resp);
-	return -1;
-    }
-
-    if (!a->proc && !msg->addr) {
-	/* If the location of the request is here and we have no third
-	 * party address in there yet... */
-	msg->addr = dest->running->laddr.s_addr;
-    }
-
-    /* Update process location */
-    set_proc_location(a, dest);
-
-    /* Update process location in the kernel */
-
-    /* Make note of ppid so that we can deal with parent change
-       messages later on */
-    a->oppid = msg->oppid;
-    a->ppid  = msg->ppid;
-    return 0;
-}
+ }
 
 static
 void do_move_response(struct request_t *req) {
-    struct assoc_t *a;
-    struct bproc_move_msg_t *msg;
-
-    msg = bproc_msg(req);
-
-    a = assoc_find(msg->hdr.to);
-
-    /* Sanity check */
-    if (a->req_id == 0) {
-	syslog(LOG_ERR,"MOVE response but not moving. (dropping)\n");
-	req_free(req);
+	/* we don't do this ever */
 	return;
-    }
-
-    if (msg->hdr.result == 0) {
-	/*--- Successful move ---*/
-
-	/* Fill in the "connect back" address if it's blank.  Note that
-	 * this only gets filled in if the move is to the master.  The
-	 * slave will have already filled in the move address if the move
-	 * was to a slave node.
-	 *
-	 * This is used by vexecmove where successful moves become senders.
-	 */
-	/* XXX PROBLEM: This address may be specific to this slave node. */
-	if (!msg->addr && a->proc)
-	    msg->addr = a->proc->running->laddr.s_addr;
-
-	/* XXX This is a hack for the vector move shit.  The children
-	 * on a VRxxxx are still waiting for a message after they
-	 * respond to the move.  Manually put them in the state where
-	 * they have an outstanding request. */
-	if (msg->type == BPROC_SYS_VRFORK ||
-	    msg->type == BPROC_SYS_VEXECMOVE) {
-	    /* Setup the new outstanding request */
-	    a->req      = BPROC_MOVE_COMPLETE;
-	    /* a->req_id is the same for the MOVE_COMPLETE message */
-	    a->req_dest = a->last; /* parent location */
-	}
-
-	send_msg(a->last, req);
-    } else {
-	/*--- Failed move ---*/
-	set_proc_location(a, a->last); /* Restore process location */
-
-	if (a->proc == a->req_dest) {
-	    /* The proc == req_dest case is the case where the process
-	     * was moving to a node and the node it was moving *from*
-	     * died while we didn't know the move status.  If the move
-	     * fails at this point, then we have no process at all and
-	     * it gets purged.  */
-	    syslog(LOG_ERR, "Purging process %d from node %d\n",
-		   assoc_pid(a), a->proc ? a->proc->id : -1);
-	    assoc_purge_proc(a);
-	}
-
-	send_msg(a->proc, req);
-    }
 }
 
 static
@@ -1874,47 +1740,7 @@ void do_exit_request(struct request_t *req) {
 
 static
 void do_fork_response(struct request_t *req) {
-    struct assoc_t *a1, *a2;
-    struct bproc_fork_resp_t *msg;
-
-    msg = bproc_msg(req);
-    /* Make note of successful forks */
-    a1 = assoc_find(msg->hdr.to);
-
-    if (!a1->proc) {
-	/* The parent process is listed as being on the front end.
-	 * This can mean only one thing - the slave died during the
-	 * fork.  In this case we need to kill off the ghost child if
-	 * the fork was successful.  Otherwise we just dump this
-	 * response.
-	 */
-	if (msg->hdr.result > 0) {
-	    struct request_t *req2;
-	    struct bproc_status_msg_t *msg2;
-	    /* Kill off the ghost */
-	    req2 = bproc_new_req(BPROC_EXIT, sizeof(*msg));
-	    msg2 = bproc_msg(req2);
-	    bpr_from_real(msg2, msg->hdr.result);
-	    bpr_to_ghost(msg2,  msg->hdr.result);
-	    msg2->hdr.result = SIGKILL;
-	    msg2->utime  = 0;
-	    msg2->stime  = 0;
-	    msg2->cutime = 0;
-	    msg2->cstime = 0;
-	    send_msg(0, req2);
-	}
-	/* XXX We should drop this message... */
-	return;
-    }
-
-    if (msg->hdr.result > 0) {
-	a2 = assoc_find(msg->hdr.result);
-	a2->proc  = a1->proc;
-	a2->req   = 0;
-	/* Fork response comes with ppids for child */
-	a2->ppid  = msg->ppid;
-	a2->oppid = msg->oppid;
-    }
+	/* we're not supporting this one */
 }
 
 static
@@ -1964,20 +1790,6 @@ void do_parent_exit(struct request_t *req) {
 	a = &associations[i];
 	/* If PID is on a slave node or PID is moving... */
 	if (a->proc || a->req == BPROC_MOVE) {
-	    if (a->ppid == pid) {
-		a->ppid = 1;
-		/* tag the node(s) in question as destinations for
-		 * this parent exit message. */
-		if (a->proc) a->proc->flag = 1;
-		if (a->req == BPROC_MOVE && a->req_dest) a->req_dest->flag = 1;
-	    }
-	    if (a->oppid == pid) {
-		a->oppid = 1;
-		/* tag the node(s) in question as destinations for
-		 * this parent exit message. */
-		if (a->proc) a->proc->flag = 1;
-		if (a->req == BPROC_MOVE && a->req_dest) a->req_dest->flag = 1;
-	    }
 	}
     }
 
@@ -2579,30 +2391,43 @@ void send_pings(void) {
     }
 }
 
+/* old meaning: set up the fd to talk the kernel
+ * new meaning: set up the socket on which to accept requests from clients. 
+ * Requests are pretty simple, of the form "run <command> on nodeset <nodeset>
+ * The only request on this one, of course, is "hook me up!"
+ */
 static
 int setup_master_fd(void) {
-    struct bproc_version_t kvers;
     struct epoll_event ev;
 
-    if (syscall(__NR_bproc, BPROC_SYS_VERSION, &kvers) != 0) {
-	syslog(LOG_ERR, "BPROC_SYS_VERSION: %s", strerror(errno));
-	return -1;
-    }
-    if (version.magic != kvers.magic ||
-	version.arch  != kvers.arch  ||
-	strcmp(version.version_string, kvers.version_string) != 0) {
-	syslog(ignore_version ? LOG_WARNING : LOG_ERR,
-	       "BProc version mismatch.  daemon=%s-%u-%d;"
-	       " kernel=%s-%u-%d (%s)\n",
-	       version.version_string, (int) version.magic, (int) version.arch,
-	       kvers.version_string,   (int) kvers.magic,   (int) kvers.arch,
-	       ignore_version ? "ignoring" : "aborting");
-	if (!ignore_version) return -1;
-    }
-    if ((ghostfd = syscall(__NR_bproc, BPROC_SYS_MASTER)) == -1) {
-	syslog(LOG_ERR, "BPROC_SYS_MASTER: %s", strerror(errno));
-	return -1;
-    }
+ 	struct sockaddr_un sun;
+
+ /*** set up socket crud ***/
+	unlink("/tmp/bpmaster");
+
+	while ((ghostfd = socket(PF_UNIX, SOCK_STREAM, 0)) == -1) {
+   /*** with respect to BProc slaves, we need to wait ***/
+   /***  for final file system to be set up (pivot_root) ***/
+		if (errno != EACCES) {
+     /*** unexpected error ***/
+			exit(-1);
+		}
+		sleep(10);
+	      /*** as per Ron's suggestion ***/
+	}
+
+	sun.sun_family = AF_UNIX;
+	strcpy(sun.sun_path, "/tmp/bpmaster");
+	umask(000);
+	if (bind(ghostfd, (struct sockaddr *)&sun, sizeof(sun)) != 0) {
+		perror("bind");
+		return (-1);
+	}
+	if (listen(ghostfd, 16) != 0) {
+		perror("listen");
+		return (-1);
+	}
+
     set_non_block(ghostfd);
 
     ev.events = 0;
@@ -2720,9 +2545,6 @@ int main(int argc, char *argv[]) {
 	exit(1);
     }
 
-#if 0
-    setup_fdsets(0);		/* 0 = size to whatever the rlimit is now. */
-#endif
     if (setup_master_fd())
 	exit(1);
 
@@ -2782,12 +2604,6 @@ int main(int argc, char *argv[]) {
 		do_config_reload = 0;
 	    }
 
-#if 0
-	    /* Copy the FD sets so that select can modify them */
-	    memcpy(rset_out, rset_in, FDS_BYTES(fdset_size));
-	    memcpy(wset_out, wset_in, FDS_BYTES(fdset_size));
-#endif
-
 	    now = time(0);
 	    timeleft.tv_sec = now >= lastping + conf.ping_timeout/2 ? 0 :
 		conf.ping_timeout/2 - (now - lastping);
@@ -2797,7 +2613,6 @@ int main(int argc, char *argv[]) {
 	    r = epoll_wait(epoll_fd, epoll_events, EPOLL_MAXEV,
 			   timeleft.tv_sec * 1000 + timeleft.tv_usec / 1000);
 
-	    /*r = select(maxfd+1, rset_out, wset_out, 0, &timeleft);*/
 	    if (r == -1) {
 		if (errno == EINTR) continue;
 		syslog(LOG_ERR, "select: %s", strerror(errno));
