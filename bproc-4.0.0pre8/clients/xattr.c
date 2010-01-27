@@ -22,17 +22,17 @@
  *-----------------------------------------------------------------------*/
 #include "xattr.h"
 extern int syscall(int num, ...);
-#include <include/asm/unistd.h>		/* Include the one from our source tree */
+#include <include/asm/unistd.h>	/* Include the one from our source tree */
 int __bproc_setxattr(const char *path, const char *name,
-             const void *value, int size, int flags) {
-    return syscall(__NR_setxattr, path, name, value, size, flags);
+		     const void *value, int size, int flags)
+{
+	return syscall(__NR_setxattr, path, name, value, size, flags);
 }
 
-int __bproc_getxattr (const char *path, const char *name,
-		      void *value, int size) {
-    return syscall(__NR_getxattr, path, name, value, size);
+int __bproc_getxattr(const char *path, const char *name, void *value, int size)
+{
+	return syscall(__NR_getxattr, path, name, value, size);
 }
-
 
 /*
  * Local variables:

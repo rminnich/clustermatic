@@ -50,8 +50,8 @@ struct desc_t {
 
 static
 struct desc_t descs[] = {
-	D(BPROC_MOVE),
-	D(BPROC_MOVE_COMPLETE),
+	D(BPROC_RUN),
+	D(BPROC_RUN_COMPLETE),
 	D(BPROC_EXEC),
 
 	D(BPROC_FWD_SIG),
@@ -249,7 +249,7 @@ void print_message(struct debug_hdr_t *req)
 				       msg->time_usec);
 			} break;
 
-		case BPROC_MOVE:{
+		case BPROC_RUN:{
 				struct bproc_move_msg_t *msg;
 				msg = bproc_debug_msg(req);
 				in_addr.s_addr = msg->addr;
@@ -282,7 +282,7 @@ void print_message(struct debug_hdr_t *req)
 				       req->req.bpr_move_oppid);
 #endif
 			} break;
-		case BPROC_RESPONSE(BPROC_MOVE):{
+		case BPROC_RESPONSE(BPROC_RUN):{
 				struct bproc_move_msg_t *msg;
 				msg = bproc_debug_msg(req);
 
@@ -474,7 +474,7 @@ void move_msg(struct debug_hdr_t *req)
 		return;
 
 	switch (hdr->req) {
-	case BPROC_MOVE:
+	case BPROC_RUN:
 		mv = malloc(sizeof(*mv));
 		memset(mv, 0, sizeof(*mv));
 
@@ -482,7 +482,7 @@ void move_msg(struct debug_hdr_t *req)
 		mv->move_req = msgdup(req);
 		list_add(&mv->list, &moves);
 		break;
-	case BPROC_RESPONSE(BPROC_MOVE):
+	case BPROC_RESPONSE(BPROC_RUN):
 		mv = move_find(hdr->id);
 		if (!mv) {
 			printf("No move request for move response id=%p\n",
@@ -507,24 +507,6 @@ void move_msg(struct debug_hdr_t *req)
 			return;
 		}
 		mv->move_resp = msgdup(req);
-		break;
-	case BPROC_RESPONSE(BPROC_MOVE_COMPLETE):
-		mv = move_find(hdr->id);
-		if (!mv) {
-			printf("No move request for move complete id=%p:\n",
-			       hdr->id);
-			print_message(req);
-			errs++;
-			return;
-		}
-
-		/* Toss this one since it's done and happy */
-		list_del(&mv->list);
-		if (mv->move_req)
-			free(mv->move_req);
-		if (mv->move_resp)
-			free(mv->move_resp);
-		free(mv);
 		break;
 	default:		/* ignore */
 		break;

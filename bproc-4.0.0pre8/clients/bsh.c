@@ -29,41 +29,43 @@
 
 extern char **environ;
 
-void Usage(char *arg0) {
-    fprintf(stderr, "usage: %s node command\n", arg0);
-    exit(1);
+void Usage(char *arg0)
+{
+	fprintf(stderr, "usage: %s node command\n", arg0);
+	exit(1);
 }
 
-int main(int argc, char *argv[]) {
-    int r;
-    int node;
-    char *check;
+int main(int argc, char *argv[])
+{
+	int r;
+	int node;
+	char *check;
 
-    if (argc < 3) Usage(argv[0]);
+	if (argc < 3)
+		Usage(argv[0]);
 
-    node = strtol(argv[1], &check, 0);
-    if (*check) {
-	fprintf(stderr, "Invalid node number: %d\n", node);
-	exit(1);
-    }
-
+	node = strtol(argv[1], &check, 0);
+	if (*check) {
+		fprintf(stderr, "Invalid node number: %d\n", node);
+		exit(1);
+	}
 #if 0
-    r = bproc_rexec(node, argv[2], argv+2, environ);
-    if (r != -1) {
-	printf("Huh?  Syscall returned w/ result != -1\n");
-	exit(1);
-    }
+	r = bproc_rexec(node, argv[2], argv + 2, environ);
+	if (r != -1) {
+		printf("Huh?  Syscall returned w/ result != -1\n");
+		exit(1);
+	}
 #endif
-    r = bproc_execmove(node, argv[2], argv+2, environ);
-    switch (errno) {
-    case EBUSY:
-	fprintf(stderr, "No ghost master present.\n");
-	break;
-    default:
-	fprintf(stderr, "%s\n", strerror(errno));
-    }
+	r = bproc_execmove(node, argv[2], argv + 2, environ);
+	switch (errno) {
+	case EBUSY:
+		fprintf(stderr, "No ghost master present.\n");
+		break;
+	default:
+		fprintf(stderr, "%s\n", strerror(errno));
+	}
 
-    exit(1);
+	exit(1);
 }
 
 /*

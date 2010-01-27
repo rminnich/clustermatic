@@ -29,108 +29,122 @@
 
 #include <sys/bproc.h>
 
-void usage(char *arg0) {
-    printf(
-"Usage: %s -c\n"
-"       %s -a [libs...] \n"
-"       %s -d [libs...] \n"
-"       %s -l\n"
-"\n"
-"       This program manages the VMAdump in-kernel library list.\n"
-"       -h            Display this message and exit.\n"
-"       -v            Display version information and exit.\n"
-"       -c            Clear kernel library list.\n"
-"       -a [libs...]  Add to the kernel library list.\n"
-"       -d [libs...]  Delete from the kernel library list.\n"
-"       -l            Print the contents of the kernel library list.\n",
-        arg0, arg0, arg0, arg0);
+void usage(char *arg0)
+{
+	printf("Usage: %s -c\n"
+	       "       %s -a [libs...] \n"
+	       "       %s -d [libs...] \n"
+	       "       %s -l\n"
+	       "\n"
+	       "       This program manages the VMAdump in-kernel library list.\n"
+	       "       -h            Display this message and exit.\n"
+	       "       -v            Display version information and exit.\n"
+	       "       -c            Clear kernel library list.\n"
+	       "       -a [libs...]  Add to the kernel library list.\n"
+	       "       -d [libs...]  Delete from the kernel library list.\n"
+	       "       -l            Print the contents of the kernel library list.\n",
+	       arg0, arg0, arg0, arg0);
 }
 
 enum { MODE_CLEAR, MODE_ADD, MODE_DEL, MODE_LIST };
 
 static
-void remove_trailing_newline(char *line) {
-    int len;
-    len = strlen(line);
-    if (line[len-1] == '\n') line[len-1] = 0;
+void remove_trailing_newline(char *line)
+{
+	int len;
+	len = strlen(line);
+	if (line[len - 1] == '\n')
+		line[len - 1] = 0;
 }
 
-int main(int argc, char *argv[]) {
-    int c,i;
-    int mode = -1;
-    char buf[PATH_MAX];
-    char *listbuf, *p;
-    
-    while((c=getopt(argc, argv, "hvclad")) != EOF) {
-	switch(c) {
-	case 'h': usage(argv[0]); exit(0);
-	case 'v': printf("%s version %s\n", argv[0], PACKAGE_VERSION); exit(0);
-	case 'c': mode = MODE_CLEAR; break;
-	case 'l': mode = MODE_LIST; break;
-	case 'a': mode = MODE_ADD; break;
-	case 'd': mode = MODE_DEL; break;
-	default: exit(1);
-	}
-    }
+int main(int argc, char *argv[])
+{
+	int c, i;
+	int mode = -1;
+	char buf[PATH_MAX];
+	char *listbuf, *p;
 
-    switch(mode) {
-    case MODE_CLEAR:
-	if (argc - optind != 0) {
-	    fprintf(stderr, "No library names allowed with -c\n");
-	    exit(1);
-	}
-	if (bproc_libclear() == -1) {
-	    perror("VMAD_LIB_CLEAR");
-	    exit(1);
-	}
-	break;
-    case MODE_ADD:
-	for (i=optind; i < argc; i++) {
-	    if (strcmp(argv[i], "-") == 0) {
-		while (fgets(buf, PATH_MAX, stdin)) {
-		    remove_trailing_newline(buf);
-		    if (bproc_libadd(buf) == -1) {
-			perror("broc_libadd");
+	while ((c = getopt(argc, argv, "hvclad")) != EOF) {
+		switch (c) {
+		case 'h':
+			usage(argv[0]);
+			exit(0);
+		case 'v':
+			printf("%s version %s\n", argv[0], PACKAGE_VERSION);
+			exit(0);
+		case 'c':
+			mode = MODE_CLEAR;
+			break;
+		case 'l':
+			mode = MODE_LIST;
+			break;
+		case 'a':
+			mode = MODE_ADD;
+			break;
+		case 'd':
+			mode = MODE_DEL;
+			break;
+		default:
 			exit(1);
-		    }   
-		}
-	    } else
-		if (bproc_libadd(argv[i]) == -1) {
-		    perror("broc_libadd");
-		    exit(1);
 		}
 	}
-	break;
-    case MODE_DEL:
-	for (i=optind; i < argc; i++) {
-	    if (strcmp(argv[i], "-") == 0) {
-		while (fgets(buf, PATH_MAX, stdin)) {
-		    remove_trailing_newline(buf);
-		    if (bproc_libdel(buf) == -1) {
-			perror("bproc_libdel");
+
+	switch (mode) {
+	case MODE_CLEAR:
+		if (argc - optind != 0) {
+			fprintf(stderr, "No library names allowed with -c\n");
 			exit(1);
-		    }
 		}
-	    } else
-		if (bproc_libdel(argv[i]) == -1) {
-		    perror("bproc_libdel");
-		    exit(1);
+		if (bproc_libclear() == -1) {
+			perror("VMAD_LIB_CLEAR");
+			exit(1);
 		}
+		break;
+	case MODE_ADD:
+		for (i = optind; i < argc; i++) {
+			if (strcmp(argv[i], "-") == 0) {
+				while (fgets(buf, PATH_MAX, stdin)) {
+					remove_trailing_newline(buf);
+					if (bproc_libadd(buf) == -1) {
+						perror("broc_libadd");
+						exit(1);
+					}
+				}
+			} else if (bproc_libadd(argv[i]) == -1) {
+				perror("broc_libadd");
+				exit(1);
+			}
+		}
+		break;
+	case MODE_DEL:
+		for (i = optind; i < argc; i++) {
+			if (strcmp(argv[i], "-") == 0) {
+				while (fgets(buf, PATH_MAX, stdin)) {
+					remove_trailing_newline(buf);
+					if (bproc_libdel(buf) == -1) {
+						perror("bproc_libdel");
+						exit(1);
+					}
+				}
+			} else if (bproc_libdel(argv[i]) == -1) {
+				perror("bproc_libdel");
+				exit(1);
+			}
+		}
+		break;
+	case MODE_LIST:
+		if (bproc_liblist(&listbuf) == -1) {
+			perror("bproc_liblist");
+			exit(1);
+		}
+		/* print out the null delimited list of libraries */
+		for (p = listbuf; *p; p += strlen(p) + 1)
+			printf("%s\n", p);
+		break;
+	default:
+		usage(argv[0]);
 	}
-	break;
-    case MODE_LIST:
-	if (bproc_liblist(&listbuf) == -1) {
-	    perror("bproc_liblist");
-	    exit(1);
-	}
-	/* print out the null delimited list of libraries */
-	for (p = listbuf; *p; p += strlen(p)+1)
-	    printf("%s\n", p);
-	break;
-    default:
-	usage(argv[0]);
-    }
-    exit(0);
+	exit(0);
 }
 
 /*

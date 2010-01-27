@@ -1073,8 +1073,8 @@ int conn_write_refill(struct conn_t *c)
 		struct bproc_message_hdr_t *msg;
 		msg = bproc_msg(c->oreq);
 		switch (msg->req) {
-		case BPROC_MOVE:
-		case BPROC_RESPONSE(BPROC_MOVE):{
+		case BPROC_RUN:
+		case BPROC_RESPONSE(BPROC_RUN):{
 				struct bproc_move_msg_t *move_msg =
 				    (struct bproc_move_msg_t *)msg;
 				if (move_msg->hdr.size >= sizeof(*move_msg)

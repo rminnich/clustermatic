@@ -31,51 +31,57 @@
 
 extern char **environ;
 
-void Usage(char *arg0) {
-    fprintf(stderr, "usage: %s command\n", arg0);
-    exit(1);
+void Usage(char *arg0)
+{
+	fprintf(stderr, "usage: %s command\n", arg0);
+	exit(1);
 }
 
-int main(int argc, char *argv[]) {
-    int i, pid;
-    int sequential = 0;
-    if (argc < 2) Usage(argv[0]);
-    bproc_init();
-    for (i=0; i < bproc_numnodes(); i++) {
-	if (!bproc_nodeup(i)) continue;
+int main(int argc, char *argv[])
+{
+	int i, pid;
+	int sequential = 0;
+	if (argc < 2)
+		Usage(argv[0]);
+	bproc_init();
+	for (i = 0; i < bproc_numnodes(); i++) {
+		if (!bproc_nodeup(i))
+			continue;
 #if 0
-	pid = bproc_rfork(i, VMAD_DUMP_EXEC);
-	if (pid < 0) {
-	    fprintf(stderr, "rfork to node %d returned %d\n", i, pid);
-	    exit(1);
-	}
-	if (pid == 0) {
-	    execve(argv[1],argv+1, environ);
-	    exit(-1);
-	}
+		pid = bproc_rfork(i, VMAD_DUMP_EXEC);
+		if (pid < 0) {
+			fprintf(stderr, "rfork to node %d returned %d\n", i,
+				pid);
+			exit(1);
+		}
+		if (pid == 0) {
+			execve(argv[1], argv + 1, environ);
+			exit(-1);
+		}
 #else
-	pid = fork();
-	if (pid < 0) {
-	    fprintf(stderr, "fork: %s\n", sys_errlist[errno]);
-	    exit(1);
-	}
-	if (pid == 0) {
-	    bproc_execmove(i, argv[1], argv+1, environ);
-	    fprintf(stderr, "execmove failed: %s\n", strerror(errno));
-	    exit(-1);
-	}
+		pid = fork();
+		if (pid < 0) {
+			fprintf(stderr, "fork: %s\n", sys_errlist[errno]);
+			exit(1);
+		}
+		if (pid == 0) {
+			bproc_execmove(i, argv[1], argv + 1, environ);
+			fprintf(stderr, "execmove failed: %s\n",
+				strerror(errno));
+			exit(-1);
+		}
 #endif
-	
-	if (sequential) {
-	    waitpid(pid, 0, 0);
-	} else {
-	    /* Pick up any procs that are already done. */
-	    while (waitpid(-1,0,WNOHANG)>0);
+
+		if (sequential) {
+			waitpid(pid, 0, 0);
+		} else {
+			/* Pick up any procs that are already done. */
+			while (waitpid(-1, 0, WNOHANG) > 0) ;
+		}
 	}
-    }
-    /* Wait for everything to complete */
-    while (waitpid(-1,0,0)>0);
-    exit(0);
+	/* Wait for everything to complete */
+	while (waitpid(-1, 0, 0) > 0) ;
+	exit(0);
 }
 
 /*

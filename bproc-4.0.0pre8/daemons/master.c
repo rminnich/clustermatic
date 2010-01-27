@@ -1857,14 +1857,14 @@ void respond(struct request_t *req, int err)
 }
 
 static
-int do_move_request(struct request_t *req)
+int do_run_request(struct request_t *req)
 {
 	/* no */
 	return -1;
 }
 
 static
-void do_move_response(struct request_t *req)
+void do_run_response(struct request_t *req)
 {
 	/* we don't do this ever */
 	return;
@@ -1915,7 +1915,7 @@ void do_get_status(struct request_t *req)
 }
 
 static
-void do_parent_exit(struct request_t *req)
+void do_client_exit(struct request_t *req)
 {
 	int i, pid;
 	struct assoc_t *a;
@@ -1934,7 +1934,7 @@ void do_parent_exit(struct request_t *req)
 	for (i = 0; i < MAXPID; i++) {
 		a = &associations[i];
 		/* If PID is on a slave node or PID is moving... */
-		if (a->proc || a->req == BPROC_MOVE) {
+		if (a->proc) {
 		}
 	}
 
@@ -1995,14 +1995,14 @@ int route_message(struct request_t *req)
 
     /*** SPECIAL HANDLING FOR CERTAIN MESSAGES ***/
 	switch (hdr->req) {
-	case BPROC_MOVE:
-		if (do_move_request(req)) {
+	case BPROC_RUN:
+		if (do_run_request(req)) {
 			req_free(req);
 			return 0;
 		}
 		break;
-	case BPROC_RESPONSE(BPROC_MOVE):
-		do_move_response(req);	/* Routing happens in here... */
+	case BPROC_RESPONSE(BPROC_RUN):
+		do_run_response(req);	/* Routing happens in here... */
 		return 0;
 	case BPROC_EXIT:
 		do_exit_request(req);
@@ -2044,7 +2044,7 @@ int route_message(struct request_t *req)
 				do_get_status(req);
 				break;
 			case BPROC_PARENT_EXIT:
-				do_parent_exit(req);
+				do_client_exit(req);
 				break;
 			default:
 				/* there's probably nothing that falls in here (?) */
@@ -2656,7 +2656,6 @@ int setup_master_fd(void)
 		       strerror(errno));
 		exit(1);
 	}
-	client_update_epoll(clientconnect);
 	return 0;
 }
 
@@ -2723,7 +2722,7 @@ void usage(char *arg0)
 int main(int argc, char *argv[])
 {
 	int c, i, j, fd;
-	int want_daemonize = 1;
+	int want_daemonize = 0;
 	static struct option long_options[] = {
 		{"help", 0, 0, 'h'},
 		{"version", 0, 0, 'V'},

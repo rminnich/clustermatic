@@ -64,13 +64,13 @@
 #define	_PATH_CP	"/bin/cp"
 #define	OPTIONS "dfprt"
 
-static int errs=0, rem=0;
+static int errs = 0, rem = 0;
 static int pflag, iamremote, iamrecursive, targetshouldbedirectory;
 static char **saved_environ;
 
 typedef struct _buf {
-	int	cnt;
-	char	*buf;
+	int cnt;
+	char *buf;
 } BUF;
 
 static void lostconn(int);
@@ -80,7 +80,7 @@ static void verifydir(const char *cp);
 static void source(int argc, char *argv[]);
 static void rsource(char *name, struct stat *statp);
 static void sink(int argc, char *argv[]);
-static BUF *allocbuf(BUF *bp, int fd, int blksize);
+static BUF *allocbuf(BUF * bp, int fd, int blksize);
 static void nospace(void);
 static void usage(char *arg0);
 static void toremote(const char *targ, int argc, char *argv[]);
@@ -88,35 +88,37 @@ static void tolocal(int argc, char *argv[]);
 static void error(const char *fmt, ...);
 
 static
-int setup_socket(int *portno) {
-    int fd, addrsize;
-    struct sockaddr_in addr;
+int setup_socket(int *portno)
+{
+	int fd, addrsize;
+	struct sockaddr_in addr;
 
-    fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd == -1) {
-	perror("socket");
-	exit(1);
-    }
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = 0;
-    if (bind(fd, (struct sockaddr*) &addr, sizeof(addr)) == -1) {
-	perror("bind");
-	exit(1);
-    }
-    
-    if (listen(fd, 5)== -1) {
-	perror("listen");
-	exit(1);
-    }
-    addrsize = sizeof(addr);
-    getsockname(fd, (struct sockaddr *) &addr, &addrsize);
-    *portno = ntohs(addr.sin_port);
-    return fd;
+	fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd == -1) {
+		perror("socket");
+		exit(1);
+	}
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = 0;
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
+		perror("bind");
+		exit(1);
+	}
+
+	if (listen(fd, 5) == -1) {
+		perror("listen");
+		exit(1);
+	}
+	addrsize = sizeof(addr);
+	getsockname(fd, (struct sockaddr *)&addr, &addrsize);
+	*portno = ntohs(addr.sin_port);
+	return fd;
 }
 
 int main(int argc, char *argv[]);
-int remote_proc(char *host, ...) { /*char *direction_flag, char *targ) {*/
+int remote_proc(char *host, ...)
+{				/*char *direction_flag, char *targ) { */
 	int node, pid, argc;
 	int listenfd, fd, addrsize;
 	int port;
@@ -128,15 +130,15 @@ int remote_proc(char *host, ...) { /*char *direction_flag, char *targ) {*/
 
 	node = strtol(host, &check, 0);
 	if (*check) {
-	    fprintf(stderr, "Invalid node number: %s\n", host);
-	    exit(1);
-	} 
-	
+		fprintf(stderr, "Invalid node number: %s\n", host);
+		exit(1);
+	}
+
 	listenfd = setup_socket(&port);
 
 	/* (ab)use BProc to setup the connection between our two procs */
-	io.fd    = STDIN_FILENO;
-	io.type  = BPROC_IO_SOCKET;
+	io.fd = STDIN_FILENO;
+	io.type = BPROC_IO_SOCKET;
 	io.flags = 0;
 	((struct sockaddr_in *)&io.d.addr)->sin_family = AF_INET;
 	((struct sockaddr_in *)&io.d.addr)->sin_addr.s_addr = 0;
@@ -149,25 +151,26 @@ int remote_proc(char *host, ...) { /*char *direction_flag, char *targ) {*/
 	}
 	if (pid == 0) {
 		va_start(arg, host);
-		for (argc=1; va_arg(arg, char *); argc++); /* count arguments. */
+		for (argc = 1; va_arg(arg, char *); argc++) ;	/* count arguments. */
 		va_end(arg);
 
-		argv = malloc (sizeof(char *)*(argc+1));
-		if (!argv) nospace();
+		argv = malloc(sizeof(char *) * (argc + 1));
+		if (!argv)
+			nospace();
 
 		va_start(arg, host);
 		argv[0] = "rcp";
-		for (argc=1; (argstr=va_arg(arg, char *)); argc++)
+		for (argc = 1; (argstr = va_arg(arg, char *)); argc++)
 			argv[argc] = argstr;
 		argv[argc] = 0;
 		va_end(arg);
 
 		rem = 0;	/* reinitialize some state... */
 		optind = 0;
-		exit(main(argc, argv)); /* jump back in.... */
+		exit(main(argc, argv));	/* jump back in.... */
 	}
 	addrsize = sizeof(addr);
-	fd = accept(listenfd, (struct sockaddr *) &addr, &addrsize);
+	fd = accept(listenfd, (struct sockaddr *)&addr, &addrsize);
 	if (fd == -1) {
 		perror("accept");
 		exit(1);
@@ -176,8 +179,7 @@ int remote_proc(char *host, ...) { /*char *direction_flag, char *targ) {*/
 	return fd;
 }
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int ch, fflag, tflag;
 	char *targ;
@@ -189,29 +191,29 @@ main(int argc, char *argv[])
 
 	fflag = tflag = 0;
 	while ((ch = getopt(argc, argv, OPTIONS)) != EOF)
-		switch(ch) {
-		/* user-visible flags */
+		switch (ch) {
+			/* user-visible flags */
 		case 'h':
-		    usage(arg0);
-		    exit(0);
+			usage(arg0);
+			exit(0);
 		case 'v':
-		    printf("%s version %s\n", arg0, PACKAGE_VERSION);
-		    exit(0);
-		case 'p':			/* preserve access/mod times */
+			printf("%s version %s\n", arg0, PACKAGE_VERSION);
+			exit(0);
+		case 'p':	/* preserve access/mod times */
 			++pflag;
 			break;
 		case 'r':
 			++iamrecursive;
 			break;
-		/* rshd-invoked options (server) */
+			/* rshd-invoked options (server) */
 		case 'd':
 			targetshouldbedirectory = 1;
 			break;
-		case 'f':			/* "from" */
+		case 'f':	/* "from" */
 			iamremote = 1;
 			fflag = 1;
 			break;
-		case 't':			/* "to" */
+		case 't':	/* "to" */
 			iamremote = 1;
 			tflag = 1;
 			break;
@@ -244,21 +246,19 @@ main(int argc, char *argv[])
 	rem = -1;
 	(void)signal(SIGPIPE, lostconn);
 
-	if ((targ = colon(argv[argc - 1]))!=NULL) {
+	if ((targ = colon(argv[argc - 1])) != NULL) {
 		/* destination is remote host */
 		*targ++ = 0;
 		toremote(targ, argc, argv);
-	}
-	else {
-		tolocal(argc, argv);		/* destination is local host */
+	} else {
+		tolocal(argc, argv);	/* destination is local host */
 		if (targetshouldbedirectory)
 			verifydir(argv[argc - 1]);
 	}
 	exit(errs);
 }
 
-static void
-toremote(const char *targ, int argc, char *argv[])
+static void toremote(const char *targ, int argc, char *argv[])
 {
 	int i, tos;
 	char *bp, *host, *src, *thost;
@@ -266,27 +266,27 @@ toremote(const char *targ, int argc, char *argv[])
 	if (*targ == 0)
 		targ = ".";
 
-	if ((thost = strchr(argv[argc - 1], '@'))!=NULL) {
-		*thost++ = 0;		/* user@host */
+	if ((thost = strchr(argv[argc - 1], '@')) != NULL) {
+		*thost++ = 0;	/* user@host */
 	} else {
 		thost = argv[argc - 1];
 	}
 
 	for (i = 0; i < argc - 1; i++) {
 		src = colon(argv[i]);
-		if (src) {			/* remote to remote */
+		if (src) {	/* remote to remote */
 			static char dot[] = ".";
 			*src++ = 0;
 			if (*src == 0)
 				src = dot;
 			host = strchr(argv[i], '@');
-			host = host ? host+1 : argv[i];
-			if (!(bp = malloc(strlen(thost)+strlen(targ)+2)))
+			host = host ? host + 1 : argv[i];
+			if (!(bp = malloc(strlen(thost) + strlen(targ) + 2)))
 				nospace();
 			sprintf(bp, "%s:%s", thost, targ);
 			remote_proc(host, src, bp, 0);
 			(void)free(bp);
-		} else {			/* local to remote */
+		} else {	/* local to remote */
 			if (rem == -1) {
 				host = thost;
 				rem = remote_proc(host, "-t", targ, 0);
@@ -295,21 +295,20 @@ toremote(const char *targ, int argc, char *argv[])
 #ifdef IP_TOS
 				tos = IPTOS_THROUGHPUT;
 				if (setsockopt(rem, IPPROTO_IP, IP_TOS,
-				    (char *)&tos, sizeof(int)) < 0)
+					       (char *)&tos, sizeof(int)) < 0)
 					perror("rcp: setsockopt TOS (ignored)");
 #endif
 				if (response() < 0)
 					exit(1);
 			}
-			source(1, argv+i);
+			source(1, argv + i);
 		}
 	}
 }
 
-static void
-tolocal(int argc, char *argv[])
+static void tolocal(int argc, char *argv[])
 {
- 	static char dot[] = ".";
+	static char dot[] = ".";
 	int i, len, tos;
 	char *bp, *host, *src;
 
@@ -320,8 +319,9 @@ tolocal(int argc, char *argv[])
 			if (!(bp = malloc(len)))
 				nospace();
 			(void)snprintf(bp, len, "%s%s%s %s %s", _PATH_CP,
-			    iamrecursive ? " -r" : "", pflag ? " -p" : "",
-			    argv[i], argv[argc - 1]);
+				       iamrecursive ? " -r" : "",
+				       pflag ? " -p" : "", argv[i],
+				       argv[argc - 1]);
 			system(bp);
 			(void)free(bp);
 			continue;
@@ -330,7 +330,7 @@ tolocal(int argc, char *argv[])
 		if (*src == 0)
 			src = dot;
 		host = strchr(argv[i], '@');
-		host = host ? host+1 : argv[i];
+		host = host ? host + 1 : argv[i];
 		rem = remote_proc(host, "-f", src, 0);
 		if (rem < 0) {
 			++errs;
@@ -339,7 +339,7 @@ tolocal(int argc, char *argv[])
 #ifdef IP_TOS
 		tos = IPTOS_THROUGHPUT;
 		if (setsockopt(rem, IPPROTO_IP, IP_TOS,
-		    (char *)&tos, sizeof(int)) < 0)
+			       (char *)&tos, sizeof(int)) < 0)
 			perror("rcp: setsockopt TOS (ignored)");
 #endif
 		sink(1, argv + argc - 1);
@@ -348,8 +348,7 @@ tolocal(int argc, char *argv[])
 	}
 }
 
-static void
-verifydir(const char *cp)
+static void verifydir(const char *cp)
 {
 	struct stat stb;
 
@@ -362,22 +361,20 @@ verifydir(const char *cp)
 	exit(1);
 }
 
-static char *
-colon(char *cp)
+static char *colon(char *cp)
 {
 	for (; *cp; ++cp) {
 		if (*cp == ':')
-			return(cp);
+			return (cp);
 		if (*cp == '/')
 			return NULL;
 	}
 	return NULL;
 }
 
-typedef void (*sighandler)(int);
+typedef void (*sighandler) (int);
 
-static void
-source(int argc, char *argv[])
+static void source(int argc, char *argv[])
 {
 	struct stat stb;
 	static BUF buffer;
@@ -394,7 +391,7 @@ source(int argc, char *argv[])
 		}
 		if (fstat(f, &stb) < 0)
 			goto notreg;
-		switch (stb.st_mode&S_IFMT) {
+		switch (stb.st_mode & S_IFMT) {
 
 		case S_IFREG:
 			break;
@@ -407,7 +404,7 @@ source(int argc, char *argv[])
 			}
 			/* FALLTHROUGH */
 		default:
-notreg:			(void)close(f);
+		      notreg:(void)close(f);
 			error("rcp: %s: not a plain file\n", name);
 			continue;
 		}
@@ -422,7 +419,8 @@ notreg:			(void)close(f);
 			 * versions expecting microseconds.
 			 */
 			(void)snprintf(buf, sizeof(buf),
-			    "T%ld 0 %ld 0\n", stb.st_mtime, stb.st_atime);
+				       "T%ld 0 %ld 0\n", stb.st_mtime,
+				       stb.st_atime);
 			(void)write(rem, buf, (int)strlen(buf));
 			if (response() < 0) {
 				(void)close(f);
@@ -430,7 +428,8 @@ notreg:			(void)close(f);
 			}
 		}
 		(void)snprintf(buf, sizeof(buf),
-		    "C%04o %Ld %s\n", stb.st_mode&07777, (long long)stb.st_size, last);
+			       "C%04o %Ld %s\n", stb.st_mode & 07777,
+			       (long long)stb.st_size, last);
 		(void)write(rem, buf, (int)strlen(buf));
 		if (response() < 0) {
 			(void)close(f);
@@ -458,8 +457,7 @@ notreg:			(void)close(f);
 	}
 }
 
-static void
-rsource(char *name, struct stat *statp)
+static void rsource(char *name, struct stat *statp)
 {
 	DIR *dirp;
 	struct dirent *dp;
@@ -476,7 +474,8 @@ rsource(char *name, struct stat *statp)
 		last++;
 	if (pflag) {
 		(void)snprintf(path, sizeof(path),
-		    "T%ld 0 %ld 0\n", statp->st_mtime, statp->st_atime);
+			       "T%ld 0 %ld 0\n", statp->st_mtime,
+			       statp->st_atime);
 		(void)write(rem, path, (int)strlen(path));
 		if (response() < 0) {
 			closedir(dirp);
@@ -484,13 +483,13 @@ rsource(char *name, struct stat *statp)
 		}
 	}
 	(void)snprintf(path, sizeof(path),
-	    "D%04o %d %s\n", statp->st_mode&07777, 0, last);
+		       "D%04o %d %s\n", statp->st_mode & 07777, 0, last);
 	(void)write(rem, path, (int)strlen(path));
 	if (response() < 0) {
 		closedir(dirp);
 		return;
 	}
-	while ((dp = readdir(dirp))!=NULL) {
+	while ((dp = readdir(dirp)) != NULL) {
 		if (dp->d_ino == 0)
 			continue;
 		if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, ".."))
@@ -508,8 +507,7 @@ rsource(char *name, struct stat *statp)
 	(void)response();
 }
 
-static int
-response(void)
+static int response(void)
 {
 	register char *cp;
 	char ch, resp, rbuf[BUFSIZ];
@@ -518,14 +516,14 @@ response(void)
 		lostconn(0);
 
 	cp = rbuf;
-	switch(resp) {
-	  case 0:			/* ok */
+	switch (resp) {
+	case 0:		/* ok */
 		return 0;
-	  default:
+	default:
 		*cp++ = resp;
 		/* FALLTHROUGH */
-	  case 1:			/* error, followed by err msg */
-	  case 2:			/* fatal error, "" */
+	case 1:		/* error, followed by err msg */
+	case 2:		/* fatal error, "" */
 		do {
 			if (read(rem, &ch, sizeof(ch)) != sizeof(ch))
 				lostconn(0);
@@ -539,12 +537,10 @@ response(void)
 			return -1;
 		exit(1);
 	}
-	/*NOTREACHED*/
-	return 0;
+	 /*NOTREACHED*/ return 0;
 }
 
-static void
-lostconn(int ignore)
+static void lostconn(int ignore)
 {
 	(void)ignore;
 
@@ -553,8 +549,7 @@ lostconn(int ignore)
 	exit(1);
 }
 
-static void
-sink(int argc, char *argv[])
+static void sink(int argc, char *argv[])
 {
 	register char *cp;
 	static BUF buffer;
@@ -675,15 +670,14 @@ sink(int argc, char *argv[])
 					error("out of memory\n");
 			}
 			(void)snprintf(namebuf, need, "%s%s%s", targ,
-			    *targ ? "/" : "", cp);
+				       *targ ? "/" : "", cp);
 			np = namebuf;
-		}
-		else
+		} else
 			np = targ;
 		exists = stat(np, &stb) == 0;
 		if (buf[0] == 'D') {
 			if (exists) {
-				if ((stb.st_mode&S_IFMT) != S_IFDIR) {
+				if ((stb.st_mode & S_IFMT) != S_IFDIR) {
 					errno = ENOTDIR;
 					goto bad;
 				}
@@ -696,13 +690,15 @@ sink(int argc, char *argv[])
 			if (setimes) {
 				setimes = 0;
 				if (utimes(np, tv) < 0)
-				    error("rcp: can't set times on %s: %s\n",
-					np, strerror(errno));
+					error
+					    ("rcp: can't set times on %s: %s\n",
+					     np, strerror(errno));
 			}
 			continue;
 		}
-		if ((ofd = open(np, O_WRONLY|O_CREAT, mode)) < 0) {
-bad:			error("rcp: %s: %s\n", np, strerror(errno));
+		if ((ofd = open(np, O_WRONLY | O_CREAT, mode)) < 0) {
+		      bad:error("rcp: %s: %s\n", np,
+			      strerror(errno));
 			continue;
 		}
 		if (exists && pflag)
@@ -724,8 +720,8 @@ bad:			error("rcp: %s: %s\n", np, strerror(errno));
 				j = read(rem, cp, amt);
 				if (j <= 0) {
 					error("rcp: %s\n",
-					    j ? strerror(errno) :
-					    "dropped connection");
+					      j ? strerror(errno) :
+					      "dropped connection");
 					exit(1);
 				}
 				amt -= j;
@@ -744,7 +740,7 @@ bad:			error("rcp: %s: %s\n", np, strerror(errno));
 			wrerr = YES;
 		if (ftruncate(ofd, size)) {
 			error("rcp: can't truncate %s: %s\n", np,
-			    strerror(errno));
+			      strerror(errno));
 			wrerr = DISPLAYED;
 		}
 		(void)close(ofd);
@@ -753,11 +749,11 @@ bad:			error("rcp: %s: %s\n", np, strerror(errno));
 			setimes = 0;
 			if (utimes(np, tv) < 0) {
 				error("rcp: can't set times on %s: %s\n",
-				    np, strerror(errno));
+				      np, strerror(errno));
 				wrerr = DISPLAYED;
 			}
 		}
-		switch(wrerr) {
+		switch (wrerr) {
 		case YES:
 			error("rcp: %s: %s\n", np, strerror(errno));
 			break;
@@ -768,20 +764,19 @@ bad:			error("rcp: %s: %s\n", np, strerror(errno));
 			break;
 		}
 	}
-screwup:
+      screwup:
 	error("rcp: protocol screwup: %s\n", why);
 	exit(1);
 }
 
-static BUF *
-allocbuf(BUF *bp, int fd, int blksize)
+static BUF *allocbuf(BUF * bp, int fd, int blksize)
 {
 	struct stat stb;
 	int size;
 
 	if (fstat(fd, &stb) < 0) {
 		error("rcp: fstat: %s\n", strerror(errno));
-		return(0);
+		return (0);
 	}
 	size = roundup(stb.st_blksize, blksize);
 	if (size == 0)
@@ -796,11 +791,10 @@ allocbuf(BUF *bp, int fd, int blksize)
 		}
 	}
 	bp->cnt = size;
-	return(bp);
+	return (bp);
 }
 
-void
-error(const char *fmt, ...)
+void error(const char *fmt, ...)
 {
 	static FILE *fp;
 	char buf[1000];
@@ -808,7 +802,7 @@ error(const char *fmt, ...)
 	++errs;
 	if (!fp && !(fp = fdopen(rem, "w")))
 		return;
-	
+
 	/* (fmt,...) might need to go to two streams.
 	 *
 	 * In { va_start ; vfprintf ; vfprintf ; va_end }, second
@@ -817,39 +811,38 @@ error(const char *fmt, ...)
 	 * Is { va_start ; vfprintf ; va_end} * 2 even allowed?
 	 *
 	 * => Dump (fmt,...) to buffer.  */
-	
+
 	{
-	    va_list ap;
-	    va_start(ap, fmt);
-	    vsnprintf(buf, sizeof(buf), fmt, ap);
-	    buf[sizeof(buf)-1] = 0;
-	    va_end(ap);
+		va_list ap;
+		va_start(ap, fmt);
+		vsnprintf(buf, sizeof(buf), fmt, ap);
+		buf[sizeof(buf) - 1] = 0;
+		va_end(ap);
 	}
-	
+
 	fprintf(fp, "%c%s", 0x01, buf);
 	fflush(fp);
 
-	if (!iamremote)	fputs(buf, stderr);
+	if (!iamremote)
+		fputs(buf, stderr);
 }
 
-static void 
-nospace(void)
+static void nospace(void)
 {
 	(void)fprintf(stderr, "rcp: out of memory.\n");
 	exit(1);
 }
 
-static void
-usage(char *arg0) {
-    printf(
-"Usage: %s [-p] f1 f2\n"
-"       %s [-r] [-p] f1 ... fn directory\n"
-"\n"
-"       -h     Display this message and exit.\n"
-"       -v     Display version information and exit.\n"
-"       -p     Preserve file timestamps.\n"
-"       -r     Copy recursively.\n", arg0, arg0);
-  exit(1);
+static void usage(char *arg0)
+{
+	printf("Usage: %s [-p] f1 f2\n"
+	       "       %s [-r] [-p] f1 ... fn directory\n"
+	       "\n"
+	       "       -h     Display this message and exit.\n"
+	       "       -v     Display version information and exit.\n"
+	       "       -p     Preserve file timestamps.\n"
+	       "       -r     Copy recursively.\n", arg0, arg0);
+	exit(1);
 }
 
 /*
