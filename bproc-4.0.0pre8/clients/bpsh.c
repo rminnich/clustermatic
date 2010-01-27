@@ -851,22 +851,13 @@ int start_processes(struct bproc_io_t *io, int iolen,
 		    const char *progname, int argc, char **argv)
 {
 	int i, r;
-	int *nodelist, *pidlist;
 	FILE *iostream;
 	unsigned char *data, *cp, *edata;
 	int amt;
 	int bpmaster;
 	int datalen = 2*1048576;
 
-#if 0
-	nodelist = malloc(sizeof(int) * num_nodes);
-	if (!nodelist) {
-		fprintf(stderr, "Out of memory.\n");
-		exit(1);
-	}
-	for (i = 0; i < num_nodes; i++)
-		nodelist[i] = nodes[i].node;
-#endif
+
 	/* The rank probably won't be interesting to the child process but
 	 * who knows... */
 	setenv("BPROC_RANK", "XXXXXXX", 1);
@@ -900,8 +891,11 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	cp += snprintf(cp, edata-cp, "\n");
 	cp += snprintf(cp, edata-cp, "%d\n", 0); // flags
 	/* no nodes yet. */
-	cp += snprintf(cp, edata-cp, "%d\n", 1); // node count
-	cp += snprintf(cp, edata-cp, "%d\n", 0); // node 0
+	cp += snprintf(cp, edata-cp, "%d\n", num_nodes);
+	for (i = 0; i < num_nodes; i++)
+		cp += snprintf(cp, edata-cp, "%d\n", 0);
+
+	
 
 	/* now read in the cpio archive. */
 	

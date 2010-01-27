@@ -10,7 +10,7 @@ LIB_MAJ=4
 LIB_MIN=0
 LIB_PATCH=0
 
-BINS=bpsh bpcp bpstat bpctl bsh bplib
+BINS=bpsh
 SOLINK=libbproc.so
 SONAME=$(SOLINK).$(LIB_MAJ)
 SO_LIB=$(SONAME).$(LIB_MIN).$(LIB_PATCH)
@@ -53,7 +53,7 @@ install: $(A_LIB) $(SO_LIB) $(BINS) compat_install
 %.o: %.c
 	$(CC) -fPIC $(CFLAGS) $(DEFS) -c -o $@ $<
 
-bproc.o: bproc.c ../kernel/bproc.h sys/bproc.h sys/bproc_common.h
+bproc.o: bproc.c ../include/bproc.h sys/bproc.h sys/bproc_common.h
 xattr.o: xattr.c xattr.h
 
 $(A_LIB): $(LIBOBJS)
@@ -82,7 +82,7 @@ compat_clean:
 %_32.o: %.c
 	$(COMPAT32_CC) -fPIC $(COMPAT32_CFLAGS) $(DEFS) -c -o $@ $<
 
-bproc.32.o: bproc.c ../kernel/bproc.h sys/bproc.h sys/bproc_common.h
+bproc.32.o: bproc.c ../include/bproc.h sys/bproc.h sys/bproc_common.h
 xattr.32.o: xattr.c xattr.h
 
 $(A_LIB32): $(LIBOBJS:%.o=%_32.o)
