@@ -50,6 +50,8 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#define _GNU_SOURCE
+#include <sched.h>
 
 #include "bproc.h"
 #include <sys/bproc.h>
@@ -1856,9 +1858,13 @@ void respond(struct request_t *req, int err)
 	route_message(resp);
 }
 
+/* this either works or it doesn't. If it doesn't, we won't bother the parent 
+ * with that knowledge. 
+ */
 static
 int do_run_request(struct request_t *req)
 {
+	/* read in a run message. It is text except for the cpio part. */
 	/* no */
 	return -1;
 }
@@ -1995,12 +2001,27 @@ int route_message(struct request_t *req)
 
     /*** SPECIAL HANDLING FOR CERTAIN MESSAGES ***/
 	switch (hdr->req) {
-	case BPROC_RUN:
-		if (do_run_request(req)) {
+	case BPROC_RUN:{	
+		void *stack;
+
+		stack = malloc(8192);
+		if (!stack) {
+			fprintf(stderr, "Out of memory.\n");
+			return -1;
+		}
+		/* no need to CLONE_VM afaict */
+		clone((int (*)(void *))do_run_request,
+			   stack + 8192 - sizeof(long),
+			   CLONE_FS | CLONE_FILES, bproc_msg(req));
+		/* either it worked or did not, but we don't much care */
+		/* IF WE EVER CLONEVM WE HAVE TO REMOVE THIS FREE */
+		free(stack);
+		if ((req)) {
 			req_free(req);
 			return 0;
 		}
 		break;
+		}
 	case BPROC_RESPONSE(BPROC_RUN):
 		do_run_response(req);	/* Routing happens in here... */
 		return 0;
@@ -2148,6 +2169,10 @@ int accept_new_client(void)
 }
 
 /* "ghost" is a little dated in this function name. */
+/* we don't talk to the client much at all. They send a request to 
+ * start a proc and we let them know if anything happened. That's about it. 
+ * so we don't use route_message for now until we think we might. 
+ */
 static
 void read_client_request(int fd)
 {
@@ -2155,6 +2180,7 @@ void read_client_request(int fd)
 	int r, size;
 	struct request_t *req;
 	void *msg;
+	struct node_t *s;
 
 	while (1) {
 		/* Get the size of the next message */
@@ -2179,7 +2205,17 @@ void read_client_request(int fd)
 		}
 
 		msgtrace(BPROC_DEBUG_MSG_FROM_KERNEL, 0, req);
+		/* we won't for just yet either 
 		route_message(req);
+		 */
+		/* and the ONLY thing we do right now is take a run request */
+		/* in the standard format ... */
+		/* we have the message, now interpret it. */
+		/* for now, just send to first slave and see if it can run it. */
+		s = find_node_by_number(0);
+		if (! s)
+			return;
+		send_msg(s, -1, req);
 	}
 }
 

@@ -36,6 +36,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <sys/prctl.h>
+#include <sys/un.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -407,41 +408,6 @@ static void sigchld_handler(void)
 static
 void cleanup_children(void)
 {
-	int pid, status, i;
-	while ((pid = waitpid(0, &status, WNOHANG)) > 0) {
-		for (i = 0; i < num_nodes; i++) {
-			if (nodes[i].pid == pid) {
-				if (!nodes[i].alive)
-					fprintf(stderr,
-						"Dead node picked up in sigchld_handler\n");
-				if (nodes[i].cnum) {
-					/* Don't adjust cnum here though.... There's a
-					 * wacky race here.  It's possible that we're
-					 * getting a SIGCHLD from a process which has
-					 * already connected and produced output.  That
-					 * connection just hasn't been accept()'ed yet.
-					 * Therefore we will allow for the possibility of
-					 * that connection still showing up.  We just move
-					 * it to the "late" list so that we won't wait for
-					 * it very long. */
-					outstanding_connections -=
-					    nodes[i].cnum;
-					late_connections += nodes[i].cnum;
-				}
-				if (WIFEXITED(status)) {
-					if (WEXITSTATUS(status) > max_exit)
-						max_exit = WEXITSTATUS(status);
-				} else {
-					fprintf(stderr,
-						"bpsh: Child process on node %d exited"
-						" abnormally.\n",
-						nodes[i].node);
-					max_exit = 255;	/* a segfault or something */
-				}
-				nodes[i].alive = 0;
-			}
-		}
-	}
 }
 
 static
@@ -860,53 +826,98 @@ void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
 	}
 }
 
+static int
+connectbpmaster(void)
+{
+	int bpmaster;
+	struct sockaddr_un sun;
+
+	bpmaster = socket(PF_UNIX, SOCK_STREAM, 0);
+	if (bpmaster < 0)
+		return bpmaster;
+
+	sun.sun_family = AF_UNIX;
+	strcpy(sun.sun_path, "/tmp/bpmaster");
+
+	if (connect(bpmaster, (struct sockaddr *)&sun, sizeof(sun)) != 0) {
+		return (-1);
+	}
+
+	return (bpmaster);
+
+}
 static
 int start_processes(struct bproc_io_t *io, int iolen,
-		    const char *progname, char **argv)
+		    const char *progname, int argc, char **argv)
 {
 	int i, r;
 	int *nodelist, *pidlist;
+	FILE *iostream;
+	unsigned char *data, *cp, *edata;
+	int amt;
+	int bpmaster;
+	int datalen = 2*1048576;
 
+#if 0
 	nodelist = malloc(sizeof(int) * num_nodes);
 	if (!nodelist) {
 		fprintf(stderr, "Out of memory.\n");
 		exit(1);
 	}
-	pidlist = malloc(sizeof(int) * num_nodes);
-	if (!pidlist) {
-		fprintf(stderr, "Out of memory.\n");
-		exit(1);
-	}
-
 	for (i = 0; i < num_nodes; i++)
 		nodelist[i] = nodes[i].node;
-
+#endif
 	/* The rank probably won't be interesting to the child process but
 	 * who knows... */
 	setenv("BPROC_RANK", "XXXXXXX", 1);
 	setenv("BPROC_PROGNAME", progname, 1);
-	r = bproc_vexecmove_io(num_nodes, nodelist, pidlist, io, iolen,
-			       progname, argv, environ);
-	if (r < 0) {
-		fprintf(stderr, "bproc_vexecmove_io: %s\n",
-			bproc_strerror(errno));
-		return -1;
-	}
+	sprintf(data, "ls %s | cpio -o", progname);
+	iostream = popen(data, "r");
 
-	/* Look at the results from the vrfork */
-	for (i = 0; i < num_nodes; i++) {
-		if (pidlist[i] > 0) {
-			nodes[i].pid = pidlist[i];
-			nodes[i].alive = 1;
-		} else {
-			nodes[i].pid = 0;
-			nodes[i].alive = 0;
-			fprintf(stderr, "%d: %s\n", nodes[i].node,
-				bproc_strerror(pidlist[i]));
+	/* format: Command (1), length(1), lines of: 
+	 * argv, (one per line)
+	 * empty line, 
+	 * env, (one per line)
+	 * empty line, 
+	 * flags as string, (line)
+	 * node count, 
+	 * list of nodes in "compact" format (one line), 
+	 * cpio archive
+	 */
+	/* now set up the data with the proper info. First 16 bytes will be command "R" and length in textual form. */
+	/* Just set up the cpio and for now be stupid and allocate 2M for it */
+	data = malloc(datalen);
+	edata = data + datalen;
+	cp = data;
+	*cp = 'R';
+	cp += 8;
+	for(i = 0; i < argc; i++)
+		cp += snprintf(cp, edata-cp, "%s\n", argv[i]);
+
+	cp += snprintf(cp, edata-cp, "\n");
+	for(i = 0; environ[i]; i++)
+		cp += snprintf(cp, edata-cp, "%s\n", environ[i]);
+	cp += snprintf(cp, edata-cp, "\n");
+	cp += snprintf(cp, edata-cp, "%d\n", 0); // flags
+	/* no nodes yet. */
+	cp += snprintf(cp, edata-cp, "%d\n", 1); // node count
+	cp += snprintf(cp, edata-cp, "%d\n", 0); // node 0
+
+	/* now read in the cpio archive. */
+	
+	amt = fread(cp, 1, edata-cp, iostream);
+	pclose(iostream);
+	bpmaster = connectbpmaster();
+	/* do it in reasonable chunks, linux gets upset if you do too much and add in weird delays */
+	for(i = 0; i < cp-data; i += amt){
+		amt = write(bpmaster, data + i, 4096);
+		if (amt < 0){
+			printf("fucked\n");
+			return -1;
 		}
 	}
-	free(nodelist);
-	free(pidlist);
+
+//	free(nodelist);
 	return 0;
 }
 
@@ -1206,7 +1217,7 @@ int main(int argc, char *argv[])
 			exit(1);
 	if (time_cmd)
 		gettimeofday(&start, 0);
-	r = start_processes(io, 3, progname, cmd_argv);
+	r = start_processes(io, 3, progname, cmd_argc, cmd_argv);
 	if (sockfd != -1)
 		stop_accepter();
 	if (r)
