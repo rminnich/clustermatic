@@ -120,9 +120,9 @@ static int verbose = 0;
 static int auto_reconnect = 0;
 static struct sockaddr local_addr;
 static int ignore_version = 0;
-static struct bproc_version_t version = { BPROC_MAGIC, BPROC_ARCH,
+static struct bproc_version_t version;/* = { BPROC_MAGIC, 386,
 	PACKAGE_MAGIC, PACKAGE_VERSION
-};
+};*/
 
 /* Slave daemon state */
 static time_t cookie = 0;
@@ -797,6 +797,82 @@ void update_system_time(long time_sec, long time_usec)
 	lastping = sys_time / 1000000;
 }
 
+/* count is text, and ends with a non-numeric e.g. \n or \0
+ * source is moved to end
+ * err handling later. 
+ */
+int
+buildarr(char **source, int *count, char ***list)
+{
+	char **arr;
+	int i;
+	char *cp = *source;
+	*count = strtoul(cp, 0, 0);
+	/* alloc an extra for NULL terminating the array */
+	arr = calloc(*count + 1, sizeof(char *));
+	while (isxdigit(*cp))
+		cp++;
+	cp++;
+	
+	for(i = 0; i < *count; i++){
+		arr[i] = cp;
+		cp += strlen(cp) + 1;
+	}
+
+	*source = cp;
+	*list = arr;
+	return 0;
+}
+/* there is not struct that we can use; this is an array of bytes we have to interpret */
+void 
+do_run(struct request_t *req)
+{
+	char *msg = bproc_msg(req), *cp;
+	int len;
+	int argc;
+	char **argv;
+	int envc, nodec;
+	char **env, **nodes;
+	char *cpio;
+	int flags;
+	char *dirname = "/tmp/sXXXXXX";
+	char cmd[128];
+	FILE *p;
+	int cpiolen;
+
+	cp = msg;
+	cp++;
+	len = sscanf(cp, "%d", &len);
+	syslog(LOG_NOTICE, "do_run: total len %d\n", len);
+	cp = &msg[8];
+	buildarr(&cp, &argc, &argv);
+	/* cp is at null after arg list; move it along. */
+	cp++;
+	buildarr(&cp, &envc, &env);
+	cp++;
+	/* get the flags */
+	flags = strtoul(cp, 0, 0);
+	cp += strlen(cp) + 1;
+	/* nodes */
+	buildarr(&cp, &nodec, &nodes);
+	cp++;
+	/* now do the cpio unpack */
+	/* let's depend on having a cpio command for now. */
+	mkdtemp(dirname);
+	chdir(dirname);
+	p = popen("cpio -i", "w");
+	cpiolen = len - (cp - msg);
+	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
+	fwrite(cp, 1,  cpiolen, p);
+	/* let's run it. */
+	if (fork() == 0) {
+		syslog(LOG_NOTICE, "do_run: exec %s\n", argv[0]);
+		execv(argv[0], argv);
+		syslog(LOG_NOTICE, "do_run: exec %s FAILED\n", argv[0]);
+	}
+	
+}
+
 /*
  *  conn_msg_in - handle an incoming message
  *
@@ -922,6 +998,11 @@ int conn_msg_in(struct conn_t *c, struct request_t *req)
 		free(req);
 		return 1;
 
+	/* --- Process commands ---*/
+	case BPROC_RUN:
+		do_run(req);
+		free(req);
+		return 1;
 	default:
 		masq_send(req);
 		return 1;

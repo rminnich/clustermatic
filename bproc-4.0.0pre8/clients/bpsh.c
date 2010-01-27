@@ -852,8 +852,9 @@ int start_processes(struct bproc_io_t *io, int iolen,
 {
 	int i, r;
 	FILE *iostream;
-	unsigned char *data, *cp, *edata;
+	unsigned char *data, *cp, *edata, *count;
 	int amt;
+	int envc;
 	int bpmaster;
 	int datalen = 2*1048576;
 
@@ -865,14 +866,14 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	sprintf(data, "ls %s | cpio -o", progname);
 	iostream = popen(data, "r");
 
-	/* format: Command (1), length(1), lines of: 
-	 * argv, (one per line)
-	 * empty line, 
-	 * env, (one per line)
-	 * empty line, 
-	 * flags as string, (line)
-	 * node count, 
-	 * list of nodes in "compact" format (one line), 
+	/* format: Command (1), length(6), null(1), lines of: 
+	 * argc text(line)
+	 * argv, (set of null-terminated strings with extra null at end)
+	 * envc text (line)
+	 * env, (set of null-terminated strings with extra null at end)
+	 * flags as string, then null, 
+	 * node count as text, null, 
+	 * list of nodes (set of null-terminated strings with extra null at end)
 	 * cpio archive
 	 */
 	/* now set up the data with the proper info. First 16 bytes will be command "R" and length in textual form. */
@@ -882,25 +883,41 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	cp = data;
 	*cp = 'R';
 	cp += 8;
-	for(i = 0; i < argc; i++)
-		cp += snprintf(cp, edata-cp, "%s\n", argv[i]);
+	snprintf(cp, edata-cp, "%d", myargc);
+	*cp++ - 0;
+	for(i = 0; i < argc; i++) {
+		cp += snprintf(cp, edata-cp, "%s", argv[i]);
+		*cp++ = 0;
+	}
 
-	cp += snprintf(cp, edata-cp, "\n");
-	for(i = 0; environ[i]; i++)
-		cp += snprintf(cp, edata-cp, "%s\n", environ[i]);
-	cp += snprintf(cp, edata-cp, "\n");
-	cp += snprintf(cp, edata-cp, "%d\n", 0); // flags
+	*cp++ = 0;
+	
+	for(i = envc = 0; environ[i]; i++, envc++)
+		;
+	snprintf(cp, edata-cp, "%d", envc);
+	*cp++ = 0;
+	for(i = 0; environ[i]; i++){
+		cp += snprintf(cp, edata-cp, "%s", environ[i]);
+		*cp++ = 0;
+	}
+	*cp++ = 0;
+	cp += snprintf(cp, edata-cp, "%d", 0); // flags
+	*cp++ = 0;
 	/* no nodes yet. */
-	cp += snprintf(cp, edata-cp, "%d\n", num_nodes);
+	cp += snprintf(cp, edata-cp, "%d", num_nodes);
+	*cp++ = 0;
 	for (i = 0; i < num_nodes; i++)
 		cp += snprintf(cp, edata-cp, "%d\n", 0);
-
+	*cp++ = 0;
 	
 
 	/* now read in the cpio archive. */
 	
 	amt = fread(cp, 1, edata-cp, iostream);
 	pclose(iostream);
+	cp += amt;
+	sprintf(&data[1], "%06d", cp-data);
+	data[7] = 0;
 	bpmaster = connectbpmaster();
 	/* do it in reasonable chunks, linux gets upset if you do too much and add in weird delays */
 	for(i = 0; i < cp-data; i += amt){
