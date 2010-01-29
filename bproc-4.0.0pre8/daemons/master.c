@@ -256,7 +256,12 @@ static char *machine_config_file = DEFAULT_CONFIG_FILE;
 static int maxfd = -1;
 
 static struct bproc_version_t version =
-    { BPROC_MAGIC, BPROC_ARCH, PACKAGE_MAGIC, PACKAGE_VERSION };
+    { 
+	BPROC_MAGIC, 
+	BPROC_ARCH, 
+	PACKAGE_MAGIC, 
+	PACKAGE_VERSION 
+};
 
 static void remove_slave(struct node_t *s, struct conn_t *c);
 static void remove_slave_connection(struct conn_t *conn);
@@ -1170,6 +1175,7 @@ int master_config(char *filename)
 		cookie_seq = time(0);
 	config_update_nodes();	/* xmit possibly update ping interval,
 				 * node number, etc. */
+
 	return 0;
 }
 
@@ -2832,6 +2838,8 @@ int main(int argc, char *argv[])
 	}
 
 	syslog(LOG_INFO, "machine contains %d nodes", conf.num_nodes);
+
+	connections = calloc(maxfd, sizeof(*connections));
 
 	assoc_init();
 	client_init();

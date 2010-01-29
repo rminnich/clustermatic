@@ -126,7 +126,6 @@ static struct bproc_version_t version;/* = { BPROC_MAGIC, 386,
 
 /* Slave daemon state */
 static time_t cookie = 0;
-static int masqfd = -1;
 static LIST_HEAD(clist);
 static struct conn_t *conn_out = 0, *conn_in = 0;
 static int ping_timeout = DEFAULT_PING_TIMEOUT;
@@ -611,8 +610,6 @@ void do_node_reboot(struct request_t *req)
 
 	/* Shut down and get ready to restart the box. */
 	close(conn_out->fd);
-	close(masqfd);
-
 	/* Sync disks */
 	sync();
 	sync();
@@ -680,19 +677,9 @@ void set_running(struct conn_t *conn)
 		syslog(LOG_ERR, "getsockname: %s", strerror(errno));
 		return;
 	}
-	if (ioctl(masqfd, BPROC_MASQ_SET_MYADDR, &addr) != 0) {
-		syslog(LOG_ERR, "ioctl(BPROC_MASQ_SET_MYADDR: %s",
-		       strerror(errno));
-		return;
-	}
 	addrsize = sizeof(addr);
 	if (getpeername(conn->fd, &addr, &addrsize)) {
 		syslog(LOG_ERR, "getpeername: %s", strerror(errno));
-		return;
-	}
-	if (ioctl(masqfd, BPROC_MASQ_SET_MASTERADDR, &addr) != 0) {
-		syslog(LOG_ERR, "ioctl(BPROC_MASQ_SET_MASTERADDR: %s",
-		       strerror(errno));
 		return;
 	}
 	if (verbose)
@@ -950,8 +937,6 @@ int conn_msg_in(struct conn_t *c, struct request_t *req)
 				node_number = msg->hdr.to;
 				syslog(LOG_NOTICE, "Setting node number to %d",
 				       node_number);
-				ioctl(masqfd, BPROC_MASQ_SET_NODENUM,
-				      node_number);
 			}
 			if (msg->ping_timeout != ping_timeout) {
 				ping_timeout = msg->ping_timeout;
@@ -1213,77 +1198,6 @@ void conn_write(struct conn_t *c)
 }
 
 static
-int read_masq_request(void)
-{
-	int r, size;
-	struct request_t *req;
-	struct bproc_message_hdr_t *msg;
-
-	while (1) {
-		/* Get the size of the next message */
-		size = ioctl(masqfd, BPROC_MSG_SIZE);
-		if (size <= 0) {
-			if (size == 0 || errno == EAGAIN)
-				return 0;
-			syslog(LOG_CRIT, "read(masq): MSG_SIZE: %s\n",
-			       strerror(errno));
-			return 0;
-		}
-		req = smalloc(sizeof(*req) + size);
-		msg = bproc_msg(req);
-
-		r = read(masqfd, msg, size);
-		if (r < 0) {
-			if (errno == EAGAIN)
-				return 0;
-			syslog(LOG_CRIT, "read(masq): %s", strerror(errno));
-		}
-
-		msgtrace(BPROC_DEBUG_MSG_FROM_KERNEL, node_number, req);
-		master_send(req);
-	}
-	return 0;
-}
-
-static
-int write_masq_request(void)
-{
-	int r;
-	struct request_t *req;
-	struct bproc_message_hdr_t *msg;
-
-	while (!list_empty(&reqs_to_masq)) {
-		/* Get a request */
-		req = list_entry(reqs_to_masq.next, struct request_t, list);
-		msg = bproc_msg(req);
-
-		msgtrace(BPROC_DEBUG_MSG_TO_KERNEL, node_number, req);
-		list_del(&req->list);
-
-		r = write(masqfd, msg, msg->size);
-		if (r == -1 && errno == ESRCH) {
-			/* If the process in question doesn't live here anymore,
-			 * bounce the request back to the master.... (Worry about
-			 * request loops?) */
-
-			/* Cases where this could happen include forwarded signals,
-			 * exit info for ghosts on the move etc. */
-			list_add_tail(&req->list, &reqs_to_master);
-			return 0;
-		}
-
-		if (r != msg->size) {
-			syslog(LOG_CRIT,
-			       "bproc: slave write error: %s (ignoring)",
-			       strerror(errno));
-		}
-
-		free(req);
-	}
-	return 0;
-}
-
-static
 void select_loop(void)
 {
 	int r, maxfd;
@@ -1308,10 +1222,6 @@ void select_loop(void)
 		/* Do the fdset thing... */
 		FD_ZERO(&rset);
 		FD_ZERO(&wset);
-		maxfd = masqfd;
-		FD_SET(masqfd, &rset);
-		if (!list_empty(&reqs_to_masq))
-			FD_SET(masqfd, &wset);
 
 		for (l = clist.next; l != &clist; l = l->next) {
 			c = list_entry(l, struct conn_t, list);
@@ -1335,14 +1245,6 @@ void select_loop(void)
 			exit(1);
 		}
 		if (r > 0) {
-			if (FD_ISSET(masqfd, &wset)) {
-				if (write_masq_request())
-					return;
-			}
-			if (FD_ISSET(masqfd, &rset)) {
-				if (read_masq_request())
-					return;
-			}
 
 			for (l = clist.next; !list_empty(&clist) && l != &clist;
 			     l = next) {
@@ -1403,10 +1305,6 @@ void reset_slave(void)
 	conn_out = 0;
 	cookie = 0;
 
-	if (masqfd != -1) {
-		close(masqfd);
-		masqfd = -1;
-	}
 	purge_requests(&reqs_to_masq);
 	purge_requests(&reqs_to_master);
 }
@@ -1415,41 +1313,14 @@ static
 int slave_setup(struct sockaddr *remaddr, struct sockaddr *locaddr)
 {
 	struct conn_t *newc;
-	struct bproc_version_t kvers;
-
-	/* First compare our version to the current kernel */
-	if (syscall(__NR_bproc, BPROC_SYS_VERSION, &kvers) != 0) {
-		perror("BProc");
-		return -1;
-	}
-	if (version.magic != kvers.magic ||
-	    version.arch != kvers.arch ||
-	    strcmp(version.version_string, kvers.version_string) != 0) {
-		syslog(LOG_ERR, "kernel: BProc version mismatch.  "
-		       "daemon=%s-%u-%d; kernel=%s-%u-%d (%s)",
-		       version.version_string, (int)version.magic,
-		       (int)version.arch, kvers.version_string,
-		       (int)kvers.magic, (int)kvers.arch,
-		       ignore_version ? "ignoring" : "aborting");
-		if (!ignore_version)
-			return -1;
-	}
 
 	newc = conn_new((struct sockaddr_in *)remaddr,
 			(struct sockaddr_in *)locaddr);
 	if (!newc)
 		return -1;
 
-	masqfd = syscall(__NR_bproc, BPROC_SYS_SLAVE);
-	if (masqfd == -1) {
-		syslog(LOG_ERR, "bproc_slave: %s", strerror(errno));
-		goto out_error;
-	}
 	return 0;
 
-      out_error:
-	reset_slave();
-	return -1;
 }
 
 /***-----------------------------------------------------------------------
