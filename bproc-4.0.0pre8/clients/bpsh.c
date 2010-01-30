@@ -858,6 +858,8 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	int bpmaster;
 	int datalen = 2*1048576;
 
+	/* Just set up the cpio and for now be stupid and allocate 2M for it */
+	data = malloc(datalen);
 
 	/* The rank probably won't be interesting to the child process but
 	 * who knows... */
@@ -877,13 +879,11 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	 * cpio archive
 	 */
 	/* now set up the data with the proper info. First 16 bytes will be command "R" and length in textual form. */
-	/* Just set up the cpio and for now be stupid and allocate 2M for it */
-	data = malloc(datalen);
 	edata = data + datalen;
 	cp = data;
 	*cp = 'R';
 	cp += 8;
-	snprintf(cp, edata-cp, "%d", myargc);
+	snprintf(cp, edata-cp, "%d", argc);
 	*cp++ - 0;
 	for(i = 0; i < argc; i++) {
 		cp += snprintf(cp, edata-cp, "%s", argv[i]);
@@ -916,7 +916,7 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	amt = fread(cp, 1, edata-cp, iostream);
 	pclose(iostream);
 	cp += amt;
-	sprintf(&data[1], "%06d", cp-data);
+	sprintf(&data[1], "%06d", (int)(cp-data));
 	data[7] = 0;
 	bpmaster = connectbpmaster();
 	/* do it in reasonable chunks, linux gets upset if you do too much and add in weird delays */

@@ -523,7 +523,7 @@ int setup_listen_socket(struct interface_t *ifc)
 	ifc->fd = fd;
 
 	ev.events = EPOLLIN;
-	ev.data.ptr = (void *)SLAVE_CONNECT;
+	ev.data.u32 = SLAVE_CONNECT | (ifc->fd<<2);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ifc->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
 		       strerror(errno));
@@ -1061,6 +1061,39 @@ void config_update_nodes(void)
 		if (conf.nodes[i].running) {
 			conn_send_conf(conf.nodes[i].running);
 		}
+}
+
+static
+const char *get_bpfs_path(void)
+{
+	char *bpfs_path;
+	bpfs_path = getenv("BPFS_PATH");
+	if (!bpfs_path)
+		bpfs_path = "/bpfs";
+	return bpfs_path;
+}
+
+static
+void upate_bpfs(void)
+{
+	int i;
+	FILE *bpfs; 
+	struct bproc_node_info_t node;
+	char status[128];
+
+	sprintf(status, "%s/%s", get_bpfs_path(), "status");
+	bpfs = fopen(status, "w");
+	for (i = 0; i < conf.num_nodes; i++){
+		node.node = conf.nodes[i].id;
+		strncpy(node.status, "up", sizeof(node.status));
+		node.mode = 0666;
+		node.user = 0;
+		node.group = 0;
+		memcpy(&node.addr, conf.nodes[i].addr, sizeof(&node.addr));
+		fwrite(&node, sizeof(node), 1, bpfs);
+	}
+	fclose(bpfs);
+
 }
 
 static
@@ -1725,9 +1758,9 @@ void slave_new_connection(struct node_t *s, struct interface_t *ifc,
 
 	/* Add this FD to our world */
 	ev.events = 0;
-	ev.data.ptr = (void *)SLAVE;
+	ev.data.u32 = SLAVE | (conn->fd << 2);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
-		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
+		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", conn->fd, &ev,
 		       strerror(errno));
 		exit(1);
 	}
@@ -1775,6 +1808,7 @@ int accept_new_slave(struct interface_t *ifc)
 					       conf.nodes[i].id);
 				slave_new_connection(&conf.nodes[i], ifc,
 						     &remote, slavefd);
+				upate_bpfs();
 				return 0;
 			}
 		}
@@ -2140,7 +2174,7 @@ void client_update_epoll(int fd)
 	ev.events = EPOLLIN;
 	if (!list_empty(&client->requests.list))
 		ev.events |= EPOLLOUT;
-	ev.data.ptr = (void *)CLIENT;
+	ev.data.u32 = CLIENT | (fd << 2);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD): %s",
 		       strerror(errno));
@@ -2152,6 +2186,8 @@ static
 int accept_new_client(void)
 {
 	int clientfd;
+	struct epoll_event ev;
+	ev.events = EPOLLIN;
 	struct sockaddr_in remote;
 
 	socklen_t remsize = sizeof(remote);
@@ -2166,11 +2202,18 @@ int accept_new_client(void)
 	if (verbose)
 		syslog(LOG_INFO, "connection from %s", ip_to_str(&remote));
 
-	set_no_delay(clientfd);
 	set_non_block(clientfd);
 
 	clients[clientfd].active = 1;
 	INIT_LIST_HEAD(&clients[clientfd].requests.list);
+
+	ev.data.u32 = CLIENT | (clientfd << 2);
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientfd, &ev)) {
+		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
+		       strerror(errno));
+		exit(1);
+	}
+
 	return 0;
 }
 
@@ -2261,7 +2304,7 @@ void conn_update_epoll(struct conn_t *c)
 		ev.events |= EPOLLIN;
 	if (!conn_out_empty(c))
 		ev.events |= EPOLLOUT;
-	ev.data.ptr = (void *)SLAVE;
+	ev.data.u32 = SLAVE | (c->fd <<2);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, c->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD, %d, {0x%x, %p} ): %s",
 		       c->fd, ev.events, ev.data.ptr, strerror(errno));
@@ -2691,8 +2734,8 @@ int setup_master_fd(void)
 
 	set_non_block(clientconnect);
 
-	ev.events = 0;
-	ev.data.ptr = (void *)CLIENT_CONNECT;
+	ev.events = EPOLLIN;
+	ev.data.u32 = CLIENT_CONNECT | (clientconnect << 2);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientconnect, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
 		       strerror(errno));
@@ -2918,14 +2961,16 @@ int main(int argc, char *argv[])
 			 */
 			for (i = 0; i < r; i++) {
 				struct conn_t *conn;
+				int what = epoll_events[i].data.u32&3;
+				int whatfd = epoll_events[i].data.u32>>2;
 				if (epoll_events[i].events & EPOLLOUT) {
-					switch ((long)epoll_events[i].data.ptr) {
+					switch (what) {
 					case CLIENT:
-						write_client_request(i);
-						client_update_epoll(i);
+						write_client_request(whatfd);
+						client_update_epoll(whatfd);
 						break;
 					case SLAVE:
-						conn = &connections[i];
+						conn = &connections[whatfd];
 						if (conn->state == CONN_DEAD)
 							break;
 						conn_write(conn);
@@ -2934,13 +2979,13 @@ int main(int argc, char *argv[])
 					}
 				}
 				if (epoll_events[i].events & EPOLLIN) {
-					switch ((long)epoll_events[i].data.ptr) {
+					switch (what) {
 					case CLIENT_CONNECT:
 						accept_new_client();
 						break;
 					case CLIENT:
-						read_client_request(i);
-						client_update_epoll(i);
+						read_client_request(whatfd);
+						client_update_epoll(whatfd);
 						break;
 					case SLAVE_CONNECT:
 						conn = 0;
@@ -2951,7 +2996,7 @@ int main(int argc, char *argv[])
 									 [j]);
 						break;
 					case SLAVE:
-						conn = &connections[i];
+						conn = &connections[whatfd];
 						if (conn->state == CONN_DEAD)
 							break;
 						conn_read(conn);
@@ -2976,7 +3021,6 @@ int main(int argc, char *argv[])
 						exit(1);
 					}
 					close(conn->fd);
-					free(conn);
 				}
 			}
 			now = time(0);

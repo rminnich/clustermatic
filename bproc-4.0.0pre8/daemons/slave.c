@@ -1222,6 +1222,7 @@ void select_loop(void)
 		/* Do the fdset thing... */
 		FD_ZERO(&rset);
 		FD_ZERO(&wset);
+		maxfd = -1;
 
 		for (l = clist.next; l != &clist; l = l->next) {
 			c = list_entry(l, struct conn_t, list);

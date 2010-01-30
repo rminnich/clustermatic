@@ -282,11 +282,6 @@ int bproc_nodelist_(struct bproc_node_set_t *ns, int fd)
 	if (r != statbuf.st_size)
 		goto again;
 
-	/* explicitly check for changes */
-	poll(&pfd, 1, 0);
-	if (pfd.revents & POLLIN)
-		goto again;
-
 	ns->size = statbuf.st_size / sizeof(*ns->node);
 	return ns->size;
 }
