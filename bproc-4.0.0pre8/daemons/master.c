@@ -2235,17 +2235,23 @@ void read_client_request(int fd)
 		/* Get the size of the next message */
 		size = bytesavail(fd);
 		if (size <= 0) {
-			if (size == 0 || errno == EAGAIN)
+			if (size < sizeof(size) || errno == EAGAIN)
 				return;
 			syslog(LOG_CRIT, "read(ghost): MSG_SIZE: %s\n",
 			       strerror(errno));
 			return;
 		}
 
+		if (read(fd, &size, sizeof(size)) < sizeof(size)) {
+			syslog(LOG_CRIT, "read(ghost): MSG_SIZE: %s\n",
+			       strerror(errno));
+			return;
+		
+		}
 		req = req_get(size);
 		msg = bproc_msg(req);
 
-		r = read(fd, msg, size);
+		r = read(fd, msg, size);HERE
 		if (r < 0) {
 			if (errno == EAGAIN)
 				return;

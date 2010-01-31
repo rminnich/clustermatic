@@ -829,7 +829,7 @@ do_run(struct request_t *req)
 
 	cp = msg;
 	cp++;
-	len = sscanf(cp, "%d", &len);
+	len = strtoul(cp, NULL, 10);
 	syslog(LOG_NOTICE, "do_run: total len %d\n", len);
 	cp = &msg[8];
 	buildarr(&cp, &argc, &argv);

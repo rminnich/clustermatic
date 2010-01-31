@@ -41,6 +41,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/wait.h>
+#include <bproc.h>
 #include <sys/bproc.h>
 #include <sched.h>
 
@@ -857,6 +858,7 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	int envc;
 	int bpmaster;
 	int datalen = 2*1048576;
+	struct bproc_message_hdr_t *hdr;
 
 	/* Just set up the cpio and for now be stupid and allocate 2M for it */
 	data = malloc(datalen);
@@ -880,7 +882,9 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	 */
 	/* now set up the data with the proper info. First 16 bytes will be command "R" and length in textual form. */
 	edata = data + datalen;
-	cp = data;
+	hdr = (struct bproc_message_hdr_t *) data;
+	hdr->req = BPROC_RUN;
+	cp = data + sizeof(*hdr);
 	*cp = 'R';
 	cp += 8;
 	snprintf(cp, edata-cp, "%d", argc);
@@ -920,6 +924,7 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	data[7] = 0;
 	bpmaster = connectbpmaster();
 	/* do it in reasonable chunks, linux gets upset if you do too much and add in weird delays */
+	hdr->size = cp-data;
 	for(i = 0; i < cp-data; i += amt){
 		amt = write(bpmaster, data + i, 4096);
 		if (amt < 0){
