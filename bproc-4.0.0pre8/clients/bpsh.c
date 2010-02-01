@@ -858,6 +858,7 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	int envc;
 	int bpmaster;
 	int datalen = 2*1048576;
+	char *runsize; 
 	struct bproc_message_hdr_t *hdr;
 
 	/* Just set up the cpio and for now be stupid and allocate 2M for it */
@@ -886,7 +887,9 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	hdr->req = BPROC_RUN;
 	cp = data + sizeof(*hdr);
 	*cp = 'R';
-	cp += 8;
+	cp++;
+	runsize = cp;
+	cp += 7;
 	snprintf(cp, edata-cp, "%d", argc);
 	*cp++ - 0;
 	for(i = 0; i < argc; i++) {
@@ -920,8 +923,8 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	amt = fread(cp, 1, edata-cp, iostream);
 	pclose(iostream);
 	cp += amt;
-	sprintf(&data[1], "%06d", (int)(cp-data));
-	data[7] = 0;
+	sprintf(runsize, "%06d", (int)(cp-data));
+	runsize[6] = 0;
 	bpmaster = connectbpmaster();
 	/* do it in reasonable chunks, linux gets upset if you do too much and add in weird delays */
 	hdr->size = cp-data;

@@ -826,8 +826,10 @@ do_run(struct request_t *req)
 	char cmd[128];
 	FILE *p;
 	int cpiolen;
+	struct bproc_message_hdr_t *hdr;
 
-	cp = msg;
+	hdr = (struct bproc_message_hdr_t *)msg;
+	cp = msg + sizeof(*hdr);
 	cp++;
 	len = strtoul(cp, NULL, 10);
 	syslog(LOG_NOTICE, "do_run: total len %d\n", len);

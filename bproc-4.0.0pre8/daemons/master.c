@@ -129,8 +129,18 @@ enum fd_type {
 	
 #define IBUFFER_SIZE (sizeof(struct bproc_message_hdr_t) + 64)
 
+/* same struct now for slaves and clients. I've tried both ways and this makes more sense 
+ * because of Erik's really nice code for sucking in bits of a request until it is complete. 
+ */
+/* clients that connect over the master file descriptor unix domain socket. 
+ * we have to do this because in kernel module based bproc, the kernel muxes the "clients" -- 
+ * really, ordinary Unix commands such as kill etc. In our case, Clients mux in over the 
+ * unix domain socket. We're losing a lot of the power of bproc but gaining heterogeneity and 
+ * portability, since we don't need the kernel module any more
+ */
 struct conn_t {
 	struct list_head list;	/* connection list */
+	int type; /* CLIENT or SLAVE */
 	int fd;
 	enum c_state state;
 	time_t ctime;		/* connection time (for timeout) */
@@ -217,19 +227,6 @@ struct config_t {
 };
 
 static struct config_t conf;
-
-/* clients that connect over the master file descriptor unix domain socket. 
- * we have to do this because in kernel module based bproc, the kernel muxes the "clients" -- 
- * really, ordinary Unix commands such as kill etc. In our case, Clients mux in over the 
- * unix domain socket. We're losing a lot of the power of bproc but gaining heterogeneity and 
- * portability, since we don't need the kernel module any more
- */
-struct client_t {
-	int active;
-	struct request_t requests;
-};
-
-static struct client_t *clients;
 
 /* Sequence number for the cookies to hand out to slaves.  This isn't
  * intended to provide any security.  It's just there to prevent an
@@ -1231,11 +1228,6 @@ struct node_t *find_node_by_number(int n)
 void
 client_init(void)
 {
-	clients = calloc(maxfd, sizeof(*clients));
-	if (! clients) {
-		syslog(LOG_CRIT, "FATAL: client_init: allocate failed");
-		assert(0);
-	}
 
 }
 
@@ -1740,6 +1732,7 @@ void slave_new_connection(struct node_t *s, struct interface_t *ifc,
 	conn = &connections[fd];
 	conn->node = s;
 	conn->fd = fd;
+	conn->type = SLAVE;
 	conn->state = CONN_NEW;
 	conn->ctime = time(0);
 	conn->laddr = ifc->addr.sin_addr;
@@ -2167,28 +2160,13 @@ int bytesavail(int fd)
 }
 
 static
-void client_update_epoll(int fd)
-{
-	struct client_t *client = &clients[fd];
-	struct epoll_event ev;
-	ev.events = EPOLLIN;
-	if (!list_empty(&client->requests.list))
-		ev.events |= EPOLLOUT;
-	ev.data.u32 = CLIENT | (fd << 2);
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev)) {
-		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD): %s",
-		       strerror(errno));
-		exit(1);
-	}
-}
-
-static
 int accept_new_client(void)
 {
 	int clientfd;
 	struct epoll_event ev;
 	ev.events = EPOLLIN;
 	struct sockaddr_in remote;
+	struct conn_t *conn;
 
 	socklen_t remsize = sizeof(remote);
 	clientfd = accept(clientconnect, (struct sockaddr *)&remote, &remsize);
@@ -2204,18 +2182,34 @@ int accept_new_client(void)
 
 	set_non_block(clientfd);
 
-	clients[clientfd].active = 1;
-	INIT_LIST_HEAD(&clients[clientfd].requests.list);
+	conn = &connections[clientfd];
+	conn->fd = clientfd;
+	conn->state = CONN_NEW;
+	conn->ctime = time(0);
+	conn->raddr = remote.sin_addr;
 
-	ev.data.u32 = CLIENT | (clientfd << 2);
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientfd, &ev)) {
-		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
+	/* I/O buffering */
+	INIT_LIST_HEAD(&conn->backlog);
+	INIT_LIST_HEAD(&conn->reqs);
+	conn->ioffset = 0;
+	conn->ireq = 0;
+	conn->ooffset = 0;
+	conn->oreq = 0;
+
+	/* Add this FD to our world */
+	ev.events = 0;
+	ev.data.u32 = CLIENT | (conn->fd << 2);
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
+		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", conn->fd, &ev,
 		       strerror(errno));
 		exit(1);
 	}
 
+	conn[clientfd].type = CLIENT;
+	conn_update_epoll(conn);
 	return 0;
 }
+
 
 /* "ghost" is a little dated in this function name. */
 /* we don't talk to the client much at all. They send a request to 
@@ -2223,46 +2217,16 @@ int accept_new_client(void)
  * so we don't use route_message for now until we think we might. 
  */
 static
-void read_client_request(int fd)
+int client_msg_in(struct conn_t *c, struct request_t *req)
 {
-	struct client_t *client = &clients[fd];
-	int r, size;
-	struct request_t *req;
-	void *msg;
-	struct node_t *s;
+	struct bproc_message_hdr_t *hdr;
 
-	while (1) {
-		/* Get the size of the next message */
-		size = bytesavail(fd);
-		if (size <= 0) {
-			if (size < sizeof(size) || errno == EAGAIN)
-				return;
-			syslog(LOG_CRIT, "read(ghost): MSG_SIZE: %s\n",
-			       strerror(errno));
-			return;
-		}
+	msgtrace(BPROC_DEBUG_MSG_FROM_SLAVE, c, req);
 
-		if (read(fd, &size, sizeof(size)) < sizeof(size)) {
-			syslog(LOG_CRIT, "read(ghost): MSG_SIZE: %s\n",
-			       strerror(errno));
-			return;
-		
-		}
-		req = req_get(size);
-		msg = bproc_msg(req);
-
-		r = read(fd, msg, size);HERE
-		if (r < 0) {
-			if (errno == EAGAIN)
-				return;
-			syslog(LOG_CRIT, "read(client): %s", strerror(errno));
-			return;
-		}
-
-		msgtrace(BPROC_DEBUG_MSG_FROM_KERNEL, 0, req);
-		/* we won't for just yet either 
-		route_message(req);
-		 */
+	hdr = bproc_msg(req);
+	switch (hdr->req) {
+	case BPROC_RUN:{
+		struct node_t *s;
 		/* and the ONLY thing we do right now is take a run request */
 		/* in the standard format ... */
 		/* we have the message, now interpret it. */
@@ -2272,33 +2236,14 @@ void read_client_request(int fd)
 			return;
 		send_msg(s, -1, req);
 	}
-}
-
-static
-int write_client_request(int fd)
-{
-	int r;
-	struct request_t *req;
-	struct bproc_message_hdr_t *hdr;
-	struct client_t *client = &clients[fd];
-
-	while (!list_empty(&client->requests.list)) {
-		req = list_entry(&client->requests.list, struct request_t, list);
-		hdr = bproc_msg(req);
-
-		msgtrace(BPROC_DEBUG_MSG_TO_KERNEL, 0, req);
-		r = write(fd, hdr, hdr->size);
-		if (r <= hdr->size) {
-			syslog(LOG_CRIT,
-			       "write(ghost): short write; ignoring (Aaaieee!!)");
-			return -1;
+	default:{
+			syslog(LOG_NOTICE,
+			       "Received message of type %d on a client connection ", hdr->req);
+			return 0;
 		}
-
-		/* Remove the request from the list and free it */
-		list_del(&req->list);
-		req_free(req);
 	}
-	return 0;
+	return 1;
+
 }
 
 static
@@ -2310,7 +2255,7 @@ void conn_update_epoll(struct conn_t *c)
 		ev.events |= EPOLLIN;
 	if (!conn_out_empty(c))
 		ev.events |= EPOLLOUT;
-	ev.data.u32 = SLAVE | (c->fd <<2);
+	ev.data.u32 = c->type | (c->fd <<2);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, c->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD, %d, {0x%x, %p} ): %s",
 		       c->fd, ev.events, ev.data.ptr, strerror(errno));
@@ -2319,7 +2264,7 @@ void conn_update_epoll(struct conn_t *c)
 }
 
 static
-int conn_msg_in(struct conn_t *c, struct request_t *req)
+int slave_msg_in(struct conn_t *c, struct request_t *req)
 {
 	struct bproc_message_hdr_t *hdr;
 
@@ -2438,6 +2383,16 @@ int conn_msg_in(struct conn_t *c, struct request_t *req)
 	}
 }
 
+static
+int conn_msg_in(struct conn_t *c, struct request_t *req)
+{
+	int ret;
+	if (c->type == SLAVE)
+		ret = slave_msg_in(c, req);
+	else
+		ret = client_msg_in(c, req);
+	return ret;
+}
 /*
  *  conn_read - read data from a slave node connection
  */
@@ -2674,8 +2629,8 @@ void send_msg(struct node_t *s, int clientfd, struct request_t *req)
 			conn_update_epoll(s->running);
 		}
 	} else {
-		list_add_tail(&req->list, &clients[clientfd].requests.list);
-		client_update_epoll(clientfd);
+		list_add_tail(&req->list, &connections[clientfd].reqs);
+		conn_update_epoll(&connections[clientfd]);
 	}
 }
 
@@ -2972,8 +2927,11 @@ int main(int argc, char *argv[])
 				if (epoll_events[i].events & EPOLLOUT) {
 					switch (what) {
 					case CLIENT:
-						write_client_request(whatfd);
-						client_update_epoll(whatfd);
+						conn = &connections[whatfd];
+						if (conn->state == CONN_DEAD)
+							break;
+						conn_write(conn);
+						conn_update_epoll(conn);
 						break;
 					case SLAVE:
 						conn = &connections[whatfd];
@@ -2990,8 +2948,11 @@ int main(int argc, char *argv[])
 						accept_new_client();
 						break;
 					case CLIENT:
-						read_client_request(whatfd);
-						client_update_epoll(whatfd);
+						conn = &connections[whatfd];
+						if (conn->state == CONN_DEAD)
+							break;
+						conn_read(conn);
+						conn_update_epoll(conn);
 						break;
 					case SLAVE_CONNECT:
 						conn = 0;
