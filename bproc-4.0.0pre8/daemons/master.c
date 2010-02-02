@@ -1591,6 +1591,25 @@ void remove_slave_connection(struct conn_t *conn)
 	}
 }
 
+static
+void remove_client_connection(struct conn_t *conn)
+{
+
+	(void) close(conn->fd);
+	conn->fd = -1;
+	conn->type = -1;
+}
+
+static
+void remove_connection(struct conn_t *conn)
+{
+	if (conn->type == SLAVE)
+		remove_slave_connection(conn);
+	else
+		remove_client_connection(conn);
+
+}
+
 /* This function will completely trash slave state, optionally keeping
  * one connection open. */
 static
@@ -2184,7 +2203,8 @@ int accept_new_client(void)
 
 	conn = &connections[clientfd];
 	conn->fd = clientfd;
-	conn->state = CONN_NEW;
+	conn->type = CLIENT;
+	conn->state = CONN_RUNNING;
 	conn->ctime = time(0);
 	conn->raddr = remote.sin_addr;
 
@@ -2205,7 +2225,6 @@ int accept_new_client(void)
 		exit(1);
 	}
 
-	conn[clientfd].type = CLIENT;
 	conn_update_epoll(conn);
 	return 0;
 }
@@ -2226,6 +2245,7 @@ int client_msg_in(struct conn_t *c, struct request_t *req)
 	hdr = bproc_msg(req);
 	switch (hdr->req) {
 	case BPROC_RUN:{
+printf("CLIENT RUN\n");
 		struct node_t *s;
 		/* and the ONLY thing we do right now is take a run request */
 		/* in the standard format ... */
@@ -2234,11 +2254,14 @@ int client_msg_in(struct conn_t *c, struct request_t *req)
 		s = find_node_by_number(0);
 		if (! s)
 			return;
+printf("SNED IT\n");
 		send_msg(s, -1, req);
+		break;
 	}
 	default:{
 			syslog(LOG_NOTICE,
 			       "Received message of type %d on a client connection ", hdr->req);
+			req_free(req);
 			return 0;
 		}
 	}
@@ -2393,6 +2416,17 @@ int conn_msg_in(struct conn_t *c, struct request_t *req)
 		ret = client_msg_in(c, req);
 	return ret;
 }
+
+static
+void conn_err(struct conn_t *conn)
+{
+	if (conn->type == SLAVE) {
+		struct node_t *s = conn->node;
+		syslog(LOG_ERR, "lost connection to slave %d", s->id);
+	} else {
+		syslog(LOG_ERR, "lost connection to client");
+	}
+}
 /*
  *  conn_read - read data from a slave node connection
  */
@@ -2400,11 +2434,11 @@ static
 void conn_read(struct conn_t *c)
 {
 	int r, size;
-	struct node_t *s = c->node;
 	struct bproc_message_hdr_t *hdr;
 
 	while (1) {
 		if (c->ireq) {
+printf("CONTINUING\n");
 			/* Continue on partial request */
 			hdr = bproc_msg(c->ireq);
 			size = hdr->size - c->ioffset;
@@ -2417,12 +2451,12 @@ void conn_read(struct conn_t *c)
 				       strerror(errno));
 			}
 			if (r <= 0) {
-				syslog(LOG_ERR, "lost connection to slave %d",
-				       s->id);
-				remove_slave_connection(c);
+				conn_err(c);
+				remove_connection(c);
 				return;
 			}
 			c->ioffset += r;
+printf("CONTINUING ioffset %d size %d\n", c->ioffset, hdr->size);
 
 			if (c->ioffset == hdr->size) {
 				/* message complete */
@@ -2433,6 +2467,7 @@ void conn_read(struct conn_t *c)
 				c->ireq = 0;
 			}
 		} else {
+printf("NEW\n");
 	    /*--- New request - read into ibuffer first ---*/
 			size = sizeof(c->ibuffer) - c->ioffset;
 
@@ -2444,9 +2479,8 @@ void conn_read(struct conn_t *c)
 				       strerror(errno));
 			}
 			if (r <= 0) {
-				syslog(LOG_ERR, "lost connection to slave %d",
-				       s->id);
-				remove_slave_connection(c);
+				conn_err(c);
+				remove_connection(c);
 				return;
 			}
 			c->ioffset += r;
@@ -2460,13 +2494,11 @@ void conn_read(struct conn_t *c)
 				    sizeof(struct bproc_message_hdr_t)
 				    || hdr->size > BPROC_MAX_MESSAGE_SIZE) {
 					syslog(LOG_ERR,
-					       "Invalid message size %d from slave"
-					       " node %d", hdr->size,
-					       c->node->id);
-					remove_slave_connection(c);
+					       "Invalid message size %d", hdr->size);
+					remove_connection(c);
 					return;
 				}
-
+printf("NEW ioffset %d size %d\n", c->ioffset, hdr->size);
 				c->ireq = req_get(hdr->size);
 				if (c->ioffset >= hdr->size) {
 					/* Complete message case */
@@ -2535,7 +2567,7 @@ int conn_write_refill(struct conn_t *c)
 		if (!list_empty(&c->reqs)) {
 			conn_write_load(c, &c->reqs);
 		} else {
-			remove_slave_connection(c);
+			remove_connection(c);
 			return 0;
 		}
 		break;
@@ -2601,7 +2633,7 @@ void conn_write(struct conn_t *c)
 		if (w <= 0) {
 			syslog(LOG_NOTICE, "lost connection to slave %d",
 			       c->node->id);
-			remove_slave_connection(c);
+			remove_connection(c);
 			return;
 		}
 		c->ooffset += w;

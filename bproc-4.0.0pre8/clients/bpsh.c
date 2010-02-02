@@ -858,18 +858,15 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	int envc;
 	int bpmaster;
 	int datalen = 2*1048576;
-	char *runsize; 
+	char cmd[128];
 	struct bproc_message_hdr_t *hdr;
-
-	/* Just set up the cpio and for now be stupid and allocate 2M for it */
-	data = malloc(datalen);
 
 	/* The rank probably won't be interesting to the child process but
 	 * who knows... */
 	setenv("BPROC_RANK", "XXXXXXX", 1);
 	setenv("BPROC_PROGNAME", progname, 1);
-	sprintf(data, "ls %s | cpio -o", progname);
-	iostream = popen(data, "r");
+	sprintf(cmd, "ls %s | cpio -o", progname);
+	iostream = popen(cmd, "r");
 
 	/* format: Command (1), length(6), null(1), lines of: 
 	 * argc text(line)
@@ -881,41 +878,39 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	 * list of nodes (set of null-terminated strings with extra null at end)
 	 * cpio archive
 	 */
+
+	data = calloc(datalen, sizeof(*data));
+
 	/* now set up the data with the proper info. First 16 bytes will be command "R" and length in textual form. */
 	edata = data + datalen;
 	hdr = (struct bproc_message_hdr_t *) data;
 	hdr->req = BPROC_RUN;
 	cp = data + sizeof(*hdr);
-	*cp = 'R';
-	cp++;
-	runsize = cp;
-	cp += 7;
-	snprintf(cp, edata-cp, "%d", argc);
-	*cp++ - 0;
+	cp += snprintf(cp, edata-cp, "%d", argc);
+	*cp++ = 0;
 	for(i = 0; i < argc; i++) {
 		cp += snprintf(cp, edata-cp, "%s", argv[i]);
 		*cp++ = 0;
 	}
-
-	*cp++ = 0;
 	
 	for(i = envc = 0; environ[i]; i++, envc++)
 		;
-	snprintf(cp, edata-cp, "%d", envc);
+	cp += snprintf(cp, edata-cp, "%d", envc);
 	*cp++ = 0;
 	for(i = 0; environ[i]; i++){
 		cp += snprintf(cp, edata-cp, "%s", environ[i]);
 		*cp++ = 0;
 	}
-	*cp++ = 0;
+
 	cp += snprintf(cp, edata-cp, "%d", 0); // flags
 	*cp++ = 0;
 	/* no nodes yet. */
 	cp += snprintf(cp, edata-cp, "%d", num_nodes);
 	*cp++ = 0;
-	for (i = 0; i < num_nodes; i++)
-		cp += snprintf(cp, edata-cp, "%d\n", 0);
-	*cp++ = 0;
+	for (i = 0; i < num_nodes; i++){
+		cp += snprintf(cp, edata-cp, "%d", 0);
+		*cp++ = 0;
+	}
 	
 
 	/* now read in the cpio archive. */
@@ -923,13 +918,15 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	amt = fread(cp, 1, edata-cp, iostream);
 	pclose(iostream);
 	cp += amt;
-	sprintf(runsize, "%06d", (int)(cp-data));
-	runsize[6] = 0;
 	bpmaster = connectbpmaster();
 	/* do it in reasonable chunks, linux gets upset if you do too much and add in weird delays */
+printf("SEND MSG %ld\n", cp-data);
 	hdr->size = cp-data;
-	for(i = 0; i < cp-data; i += amt){
-		amt = write(bpmaster, data + i, 4096);
+	write(bpmaster, data, sizeof(*hdr));
+	for(i = sizeof(*hdr); i < cp-data; i += amt){
+		int left = cp - (data + i);
+		amt = left > 4096? 4096 : left;
+		amt = write(bpmaster, data + i, amt);
 		if (amt < 0){
 			printf("fucked\n");
 			return -1;

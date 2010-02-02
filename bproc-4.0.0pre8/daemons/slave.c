@@ -794,20 +794,24 @@ buildarr(char **source, int *count, char ***list)
 	char **arr;
 	int i;
 	char *cp = *source;
+syslog(LOG_NOTICE, "cp %p %s", cp, cp);
 	*count = strtoul(cp, 0, 0);
+syslog(LOG_NOTICE, "COUNT %d", *count);
 	/* alloc an extra for NULL terminating the array */
 	arr = calloc(*count + 1, sizeof(char *));
-	while (isxdigit(*cp))
+	while (isdigit(*cp))
 		cp++;
 	cp++;
 	
 	for(i = 0; i < *count; i++){
+syslog(LOG_NOTICE, "cp %p", cp);
 		arr[i] = cp;
 		cp += strlen(cp) + 1;
 	}
 
 	*source = cp;
 	*list = arr;
+syslog(LOG_NOTICE, "buildarr done");
 	return 0;
 }
 /* there is not struct that we can use; this is an array of bytes we have to interpret */
@@ -822,34 +826,37 @@ do_run(struct request_t *req)
 	char **env, **nodes;
 	char *cpio;
 	int flags;
-	char *dirname = "/tmp/sXXXXXX";
+	char *dirname;
 	char cmd[128];
 	FILE *p;
 	int cpiolen;
 	struct bproc_message_hdr_t *hdr;
 
 	hdr = (struct bproc_message_hdr_t *)msg;
+	len = hdr->size;
 	cp = msg + sizeof(*hdr);
-	cp++;
-	len = strtoul(cp, NULL, 10);
-	syslog(LOG_NOTICE, "do_run: total len %d\n", len);
-	cp = &msg[8];
+	syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
+	syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
 	buildarr(&cp, &argc, &argv);
-	/* cp is at null after arg list; move it along. */
-	cp++;
+syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
 	buildarr(&cp, &envc, &env);
-	cp++;
+	
 	/* get the flags */
 	flags = strtoul(cp, 0, 0);
 	cp += strlen(cp) + 1;
+	syslog(LOG_NOTICE, "flags %d\n", flags);
 	/* nodes */
+syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 	buildarr(&cp, &nodec, &nodes);
-	cp++;
 	/* now do the cpio unpack */
 	/* let's depend on having a cpio command for now. */
+syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
+	dirname=strdup("/tmp/bproc2XXXXXX");
 	mkdtemp(dirname);
+syslog(LOG_NOTICE, "dirname %s", dirname);
 	chdir(dirname);
-	p = popen("cpio -i", "w");
+	syslog(LOG_NOTICE, "chdir %s", dirname);
+	p = popen("cpio -i -H newc", "w");
 	cpiolen = len - (cp - msg);
 	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
 	fwrite(cp, 1,  cpiolen, p);
