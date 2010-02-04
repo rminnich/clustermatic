@@ -2239,6 +2239,7 @@ static
 int client_msg_in(struct conn_t *c, struct request_t *req)
 {
 	struct bproc_message_hdr_t *hdr;
+	struct sockaddr_in addr;
 
 	msgtrace(BPROC_DEBUG_MSG_FROM_SLAVE, c, req);
 

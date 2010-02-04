@@ -46,6 +46,7 @@
 #include <sched.h>
 
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #define IO_STDIN         1
 #define IO_SEQUENTIAL    2
@@ -562,7 +563,7 @@ void forward_io_new_fd(int fd)
 		close(fd);
 	} else {
 		for (i = 0; i < num_nodes; i++) {
-			if (nodes[i].pid == pid) {
+			{
 				if (nodes[i].cnum == 0) {
 					fprintf(stderr,
 						"too many connections from"
@@ -848,7 +849,7 @@ connectbpmaster(void)
 
 }
 static
-int start_processes(struct bproc_io_t *io, int iolen,
+int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen,
 		    const char *progname, int argc, char **argv)
 {
 	int i, r;
@@ -860,12 +861,12 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	int datalen = 2*1048576;
 	char cmd[128];
 	struct bproc_message_hdr_t *hdr;
-
+	
 	/* The rank probably won't be interesting to the child process but
 	 * who knows... */
 	setenv("BPROC_RANK", "XXXXXXX", 1);
 	setenv("BPROC_PROGNAME", progname, 1);
-	sprintf(cmd, "ls %s | cpio -o", progname);
+	sprintf(cmd, "ls %s | cpio -H newc -o", progname);
 	iostream = popen(cmd, "r");
 
 	/* format: Command (1), length(6), null(1), lines of: 
@@ -874,6 +875,10 @@ int start_processes(struct bproc_io_t *io, int iolen,
 	 * envc text (line)
 	 * env, (set of null-terminated strings with extra null at end)
 	 * flags as string, then null, 
+	 * host IP as text, null, 
+	 * stdin port as text, null, 
+	 * stdout port as text, null, 
+	 * stderr port as text, null
 	 * node count as text, null, 
 	 * list of nodes (set of null-terminated strings with extra null at end)
 	 * cpio archive
@@ -904,6 +909,17 @@ int start_processes(struct bproc_io_t *io, int iolen,
 
 	cp += snprintf(cp, edata-cp, "%d", 0); // flags
 	*cp++ = 0;
+
+	cp += snprintf(cp, edata-cp, "%s", inet_ntoa(hostip->sin_addr));
+	*cp++ = 0;
+	cp += snprintf(cp, edata-cp, "%d", (int) iolen);
+	*cp++ = 0;
+	for(i = 0; i < iolen; i++) {
+		cp += snprintf(cp, edata-cp, "%d", ntohs(((struct sockaddr_in *)&io[i].d.addr)->sin_port));
+		*cp++ = 0;
+	}
+
+	
 	/* no nodes yet. */
 	cp += snprintf(cp, edata-cp, "%d", num_nodes);
 	*cp++ = 0;
@@ -981,6 +997,9 @@ int main(int argc, char *argv[])
 	struct bproc_io_t io[3];
 	int time_cmd = 0;
 	struct timeval start, end;
+	struct sockaddr_in hostaddr;
+	char hostname[128];
+	struct hostent *h;
 
 	static struct option long_options[] = {
 		{"help", 0, 0, 'h'},
@@ -1231,9 +1250,10 @@ int main(int argc, char *argv[])
 	if (sockfd != -1)
 		if (start_accepter(sockfd))
 			exit(1);
+
 	if (time_cmd)
 		gettimeofday(&start, 0);
-	r = start_processes(io, 3, progname, cmd_argc, cmd_argv);
+	r = start_processes(&hostaddr, io, 3, progname, cmd_argc, cmd_argv);
 	if (sockfd != -1)
 		stop_accepter();
 	if (r)

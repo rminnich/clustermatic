@@ -814,9 +814,47 @@ syslog(LOG_NOTICE, "cp %p", cp);
 syslog(LOG_NOTICE, "buildarr done");
 	return 0;
 }
+
+static
+int setup_iofw(struct sockaddr_in *raddr)
+{
+	int lsize, errnosave;
+	struct sockaddr_in tmp;
+	int fd;
+
+	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+		errnosave = errno;
+		syslog(LOG_ERR, "socket: %s", strerror(errno));
+		errno = errnosave;
+		return 0;
+	}
+
+	if (verbose)
+		syslog(LOG_INFO, "Connecting to %s:%d...",
+		       inet_ntoa(raddr->sin_addr), ntohs(raddr->sin_port));
+
+	if (connect(fd, (struct sockaddr *)raddr, sizeof(*raddr)) == -1) {
+		if (errno != EINPROGRESS) {
+			errnosave = errno;
+			syslog(LOG_ERR, "connect(%s:%d): %s",
+			       inet_ntoa(raddr->sin_addr),
+			       ntohs(raddr->sin_port), strerror(errno));
+			close(fd);
+			errno = errnosave;
+			return 0;
+		}
+	}
+
+	set_keep_alive(fd);
+	set_no_delay(fd);
+	set_non_block(fd);
+
+	return fd;
+}
+
 /* there is not struct that we can use; this is an array of bytes we have to interpret */
 void 
-do_run(struct request_t *req)
+do_run(struct conn_t *c, struct request_t *req)
 {
 	char *msg = bproc_msg(req), *cp;
 	int len;
@@ -831,6 +869,9 @@ do_run(struct request_t *req)
 	FILE *p;
 	int cpiolen;
 	struct bproc_message_hdr_t *hdr;
+	char **ports;
+	int portc;
+	struct sockaddr_in addr;
 
 	hdr = (struct bproc_message_hdr_t *)msg;
 	len = hdr->size;
@@ -845,6 +886,10 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
 	flags = strtoul(cp, 0, 0);
 	cp += strlen(cp) + 1;
 	syslog(LOG_NOTICE, "flags %d\n", flags);
+	/* host IP and ports */
+	syslog(LOG_NOTICE, "hostip %s", inet_ntoa(addr.sin_addr));
+	cp += strlen(cp) + 1;
+	buildarr(&cp, &portc, &ports);
 	/* nodes */
 syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 	buildarr(&cp, &nodec, &nodes);
@@ -856,12 +901,31 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 syslog(LOG_NOTICE, "dirname %s", dirname);
 	chdir(dirname);
 	syslog(LOG_NOTICE, "chdir %s", dirname);
-	p = popen("cpio -i -H newc", "w");
+	p = popen("cpio -i ", "w");
+syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
 	cpiolen = len - (cp - msg);
 	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
 	fwrite(cp, 1,  cpiolen, p);
+	fclose(p);
 	/* let's run it. */
 	if (fork() == 0) {
+		int fd;
+		int pid = getpid();
+		int i;
+		/* fix up IO */
+		/* weirdly it seems bproc forwarding current sends all the same port. But let's plan for the future. 
+		 * new socket for each port (soon)
+		 */
+		fprintf(stderr, "connect ports\n");
+		for(i = 0; i < 3; i++) {
+			addr.sin_addr = c->raddr.sin_addr;
+			addr.sin_family = AF_INET;
+			addr.sin_port = htons(strtoul(ports[i], 0, 0));
+			fd = setup_iofw(&addr);
+			write(fd, &pid, sizeof(pid));
+			write(fd, &i, sizeof(i));
+			dup2(fd, i);
+		}
 		syslog(LOG_NOTICE, "do_run: exec %s\n", argv[0]);
 		execv(argv[0], argv);
 		syslog(LOG_NOTICE, "do_run: exec %s FAILED\n", argv[0]);
@@ -994,7 +1058,7 @@ int conn_msg_in(struct conn_t *c, struct request_t *req)
 
 	/* --- Process commands ---*/
 	case BPROC_RUN:
-		do_run(req);
+		do_run(c, req);
 		free(req);
 		return 1;
 	default:
