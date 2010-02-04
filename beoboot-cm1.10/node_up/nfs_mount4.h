@@ -11,31 +11,31 @@
 #define NFS_MOUNT_VERSION	4
 
 struct nfs2_fh {
-        char                    data[32];
+	char data[32];
 };
 struct nfs3_fh {
-        unsigned short          size;
-        unsigned char           data[64];
+	unsigned short size;
+	unsigned char data[64];
 };
 
 struct nfs_mount_data {
-	int		version;		/* 1 */
-	int		fd;			/* 1 */
-	struct nfs2_fh	old_root;		/* 1 */
-	int		flags;			/* 1 */
-	int		rsize;			/* 1 */
-	int		wsize;			/* 1 */
-	int		timeo;			/* 1 */
-	int		retrans;		/* 1 */
-	int		acregmin;		/* 1 */
-	int		acregmax;		/* 1 */
-	int		acdirmin;		/* 1 */
-	int		acdirmax;		/* 1 */
-	struct sockaddr_in addr;		/* 1 */
-	char		hostname[256];		/* 1 */
-	int		namlen;			/* 2 */
-	unsigned int	bsize;			/* 3 */
-	struct nfs3_fh	root;			/* 4 */
+	int version;		/* 1 */
+	int fd;			/* 1 */
+	struct nfs2_fh old_root;	/* 1 */
+	int flags;		/* 1 */
+	int rsize;		/* 1 */
+	int wsize;		/* 1 */
+	int timeo;		/* 1 */
+	int retrans;		/* 1 */
+	int acregmin;		/* 1 */
+	int acregmax;		/* 1 */
+	int acdirmin;		/* 1 */
+	int acdirmax;		/* 1 */
+	struct sockaddr_in addr;	/* 1 */
+	char hostname[256];	/* 1 */
+	int namlen;		/* 2 */
+	unsigned int bsize;	/* 3 */
+	struct nfs3_fh root;	/* 4 */
 };
 
 /* bits in the flags field */
@@ -51,4 +51,3 @@ struct nfs_mount_data {
 #define NFS_MOUNT_KERBEROS	0x0100	/* 3 */
 #define NFS_MOUNT_NONLM		0x0200	/* 3 */
 #define NFS_MOUNT_BROKEN_SUID	0x0400	/* 4 */
-

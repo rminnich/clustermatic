@@ -34,11 +34,11 @@
 #define _NODE_UP_H
 
 enum loglevel {
-    LOG_FATAL,
-    LOG_ERROR,
-    LOG_WARNING,
-    LOG_INFO,
-    LOG_DEBUG
+	LOG_FATAL,
+	LOG_ERROR,
+	LOG_WARNING,
+	LOG_INFO,
+	LOG_DEBUG
 };
 
 struct sockaddr_in;
@@ -57,19 +57,19 @@ extern "C" {
 #endif
 
 /* These functions are provided by nodeup */
-void log_print     (int level, char *fmt, ...);
-void console_print (char *fmt, ...);
-int  nodeup_rpc    (int (*funcp)(void *, int, void **, int *),
-		    const void *in_data, int in_size,
-		    void **out_data_, int *out_size_);
-void **nodeup_private(const char *tag);
+	void log_print(int level, char *fmt, ...);
+	void console_print(char *fmt, ...);
+	int nodeup_rpc(int (*funcp) (void *, int, void **, int *),
+		       const void *in_data, int in_size,
+		       void **out_data_, int *out_size_);
+	void **nodeup_private(const char *tag);
 
 /* The module should define these.  I have prototypes here so that
  * there's no confusion about what the prototype should be. */
-int nodeup_premove (int, char **);
-int nodeup_postmove(int, char **);
+	int nodeup_premove(int, char **);
+	int nodeup_postmove(int, char **);
 
-int nodeup_node(void);
+	int nodeup_node(void);
 
 /* A handy little crutch for plugins that need /proc. */
 
@@ -77,14 +77,13 @@ int nodeup_node(void);
  * automatically unmounted when the plugin function returns.  It can
  * also be manually unmounted with nodeup_umnt_proc().
  * nodeup_mnt_proc should not be called more than once. */
-int  nodeup_mnt_proc(const char *path);
-void nodeup_umnt_proc(void);
+	int nodeup_mnt_proc(const char *path);
+	void nodeup_umnt_proc(void);
 
 #ifdef __cplusplus
 }
 #endif
 #endif
-
 /*
  * Local variables:
  * c-basic-offset: 4

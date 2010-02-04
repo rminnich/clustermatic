@@ -31,11 +31,11 @@ struct cmconf;
 struct cmconf_line;
 
 struct cmconf_option {
-    char *tag;
-    int minargs;                /* Number of config args */
-    int maxargs;                /* Max # of args. */
-    int pass;                   /* What pass should this one be active on ? */
-    int (*callback)(struct cmconf *, char **args);
+	char *tag;
+	int minargs;		/* Number of config args */
+	int maxargs;		/* Max # of args. */
+	int pass;		/* What pass should this one be active on ? */
+	int (*callback) (struct cmconf *, char **args);
 };
 
 #ifdef __cplusplus
@@ -43,38 +43,40 @@ extern "C" {
 #endif
 
 /* Configuration file load / save */
-extern struct cmconf * cmconf_read (const char *filename, int keep_open);
-extern int             cmconf_write(struct cmconf *conf);
-extern void            cmconf_print(FILE *f, struct cmconf *conf);
+	extern struct cmconf *cmconf_read(const char *filename, int keep_open);
+	extern int cmconf_write(struct cmconf *conf);
+	extern void cmconf_print(FILE * f, struct cmconf *conf);
 
-extern void cmconf_close(struct cmconf *conf);
-extern void cmconf_free(struct cmconf *conf);
+	extern void cmconf_close(struct cmconf *conf);
+	extern void cmconf_free(struct cmconf *conf);
 
 /* Configuration file processing calls */
-extern int cmconf_process_file  (const char *,         struct cmconf_option *);
-extern int cmconf_process       (struct cmconf *,      struct cmconf_option *);
-extern int cmconf_process_line  (struct cmconf_line *, struct cmconf_option *);
-extern int cmconf_process_string(const char *,         struct cmconf_option *);
-extern int cmconf_process_args  (struct cmconf *, char **,
-				 struct cmconf_option *);
-    
+	extern int cmconf_process_file(const char *, struct cmconf_option *);
+	extern int cmconf_process(struct cmconf *, struct cmconf_option *);
+	extern int cmconf_process_line(struct cmconf_line *,
+				       struct cmconf_option *);
+	extern int cmconf_process_string(const char *, struct cmconf_option *);
+	extern int cmconf_process_args(struct cmconf *, char **,
+				       struct cmconf_option *);
+
 /* Configuration file line access */
-extern const char *cmconf_get_line(struct cmconf_line *);
-extern struct cmconf_line *cmconf_first(struct cmconf *);
-extern struct cmconf_line *cmconf_next(struct cmconf *, struct cmconf_line *);
+	extern const char *cmconf_get_line(struct cmconf_line *);
+	extern struct cmconf_line *cmconf_first(struct cmconf *);
+	extern struct cmconf_line *cmconf_next(struct cmconf *,
+					       struct cmconf_line *);
 
 /* Configuration file editing */
-extern void cmconf_set_line(struct cmconf_line *, const char *);
-extern void cmconf_delete(struct cmconf_line *);
-extern void cmconf_insert_before(struct cmconf_line *, const char *);
-extern void cmconf_insert_after(struct cmconf_line *, const char *);
-extern void cmconf_append(struct cmconf *, const char *);
+	extern void cmconf_set_line(struct cmconf_line *, const char *);
+	extern void cmconf_delete(struct cmconf_line *);
+	extern void cmconf_insert_before(struct cmconf_line *, const char *);
+	extern void cmconf_insert_after(struct cmconf_line *, const char *);
+	extern void cmconf_append(struct cmconf *, const char *);
 
 /* Parser state access */
-extern const char *cmconf_file(struct cmconf *conf);
-extern int         cmconf_lineno(struct cmconf *conf); /* 1 based lineno */
-extern int         cmconf_pass(struct cmconf *conf);
-extern struct cmconf_line * cmconf_line(struct cmconf *conf);
+	extern const char *cmconf_file(struct cmconf *conf);
+	extern int cmconf_lineno(struct cmconf *conf);	/* 1 based lineno */
+	extern int cmconf_pass(struct cmconf *conf);
+	extern struct cmconf_line *cmconf_line(struct cmconf *conf);
 
 #ifdef __cplusplus
 }

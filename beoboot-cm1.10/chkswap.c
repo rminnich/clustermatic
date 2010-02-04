@@ -36,106 +36,111 @@
         ((__swapoffset(magic.magic) - __swapoffset(info.badpages)) / sizeof(int))
 #endif
 union swap_header {
-    struct {
-	char reserved[PAGE_SIZE - 10];
-	char magic[10];
-    } magic;
-    struct {
-	char         bootbits[1024];    /* Space for disklabel etc. */
-	unsigned int version;
-	unsigned int last_page;
-	unsigned int nr_badpages;
-	unsigned int padding[125];
-	unsigned int badpages[1];
-    } info;
+	struct {
+		char reserved[PAGE_SIZE - 10];
+		char magic[10];
+	} magic;
+	struct {
+		char bootbits[1024];	/* Space for disklabel etc. */
+		unsigned int version;
+		unsigned int last_page;
+		unsigned int nr_badpages;
+		unsigned int padding[125];
+		unsigned int badpages[1];
+	} info;
 };
 
-void usage(char *arg0) {
-    printf("Usage: %s <device>\n", arg0);
+void usage(char *arg0)
+{
+	printf("Usage: %s <device>\n", arg0);
 }
 
-int main(int argc, char *argv[]) {
-    int fd, c;
-    int version;
+int main(int argc, char *argv[])
+{
+	int fd, c;
+	int version;
 #ifdef MORE_CHECKS
-    int i, swapfilesize=0, nr_good_pages;
+	int i, swapfilesize = 0, nr_good_pages;
 #endif
-    union swap_header swap_header;
-    while ((c = getopt(argc, argv, "")) != EOF) {
-	switch (c) {
-	case 'h': usage(argv[0]); exit(0);
-	case 'v': printf("chkswap version %s\n", PACKAGE_VERSION); exit(0);
-	default:
-	    exit(1);
+	union swap_header swap_header;
+	while ((c = getopt(argc, argv, "")) != EOF) {
+		switch (c) {
+		case 'h':
+			usage(argv[0]);
+			exit(0);
+		case 'v':
+			printf("chkswap version %s\n", PACKAGE_VERSION);
+			exit(0);
+		default:
+			exit(1);
+		}
 	}
-    }
 
-    if (argc-optind != 1) {
-	usage(argv[0]);
-	exit(0);
-    }
-	
-    /* Read the swap signature off the disk. */
-    if ((fd = open(argv[optind], O_RDONLY)) == -1) {
-	perror(argv[optind]);
-	exit(1);
-    }
-    if (read(fd, &swap_header, sizeof(swap_header)) != sizeof(swap_header)) {
-	perror("read");
-	exit(1);
-    }
+	if (argc - optind != 1) {
+		usage(argv[0]);
+		exit(0);
+	}
 
-    if (!memcmp("SWAP-SPACE",swap_header.magic.magic,10))
-	version = 1;
-    else if (!memcmp("SWAPSPACE2",swap_header.magic.magic,10))
-	version = 2;
-    else {
-	fprintf(stderr, "%s: %s: Unable to find swap-space signature\n",
-		argv[0], argv[optind]);
-	exit(1);
-    }
+	/* Read the swap signature off the disk. */
+	if ((fd = open(argv[optind], O_RDONLY)) == -1) {
+		perror(argv[optind]);
+		exit(1);
+	}
+	if (read(fd, &swap_header, sizeof(swap_header)) != sizeof(swap_header)) {
+		perror("read");
+		exit(1);
+	}
 
-    /* We could do more interesting checks here but this is good
-     * enough for our purposes */
+	if (!memcmp("SWAP-SPACE", swap_header.magic.magic, 10))
+		version = 1;
+	else if (!memcmp("SWAPSPACE2", swap_header.magic.magic, 10))
+		version = 2;
+	else {
+		fprintf(stderr, "%s: %s: Unable to find swap-space signature\n",
+			argv[0], argv[optind]);
+		exit(1);
+	}
+
+	/* We could do more interesting checks here but this is good
+	 * enough for our purposes */
 #ifdef MORE_CHECKS
-    if ( (version == 2) && (swap_header.info.version != 1) ) {
-	fprintf(stderr,
-	       "Unable to handle swap header version %d\n",
-	       swap_header.info.version);
-	exit(1);
-    }
+	if ((version == 2) && (swap_header.info.version != 1)) {
+		fprintf(stderr,
+			"Unable to handle swap header version %d\n",
+			swap_header.info.version);
+		exit(1);
+	}
 
-    if (swap_header.info.nr_badpages > MAX_SWAP_BADPAGES)
-	exit(1);
-    if (swap_header.info.last_page >= SWP_OFFSET(SWP_ENTRY(0,~0UL)))
-	exit(1);
+	if (swap_header.info.nr_badpages > MAX_SWAP_BADPAGES)
+		exit(1);
+	if (swap_header.info.last_page >= SWP_OFFSET(SWP_ENTRY(0, ~0UL)))
+		exit(1);
 
-    for (i=0; i<swap_header.info.nr_badpages; i++) {
-	int page = swap_header.info.badpages[i];
-	if (page <= 0 || page >= swap_header.info.last_page)
-	    exit(1);
-    }
- 
-    if (ioctl(fd, BLKGETSIZE, &swapfilesize) < 0) {
-	perror("BLKGETSIZE ioctl");
-	exit(1);
-    }
+	for (i = 0; i < swap_header.info.nr_badpages; i++) {
+		int page = swap_header.info.badpages[i];
+		if (page <= 0 || page >= swap_header.info.last_page)
+			exit(1);
+	}
 
-    swapfilesize = (swapfilesize >> 3) - 1;
+	if (ioctl(fd, BLKGETSIZE, &swapfilesize) < 0) {
+		perror("BLKGETSIZE ioctl");
+		exit(1);
+	}
 
-    if (swap_header.info.last_page > swapfilesize) {
-	fprintf(stderr,
-		       "Swap area shorter than signature indicates\n");
-	exit(1);
-    }
-    nr_good_pages = swap_header.info.last_page -
-	swap_header.info.nr_badpages - 1;
-    if (!nr_good_pages) {
-	fprintf(stderr, "Empty swap-file\n");
-	exit(1);
-    }
+	swapfilesize = (swapfilesize >> 3) - 1;
+
+	if (swap_header.info.last_page > swapfilesize) {
+		fprintf(stderr, "Swap area shorter than signature indicates\n");
+		exit(1);
+	}
+	nr_good_pages = swap_header.info.last_page -
+	    swap_header.info.nr_badpages - 1;
+	if (!nr_good_pages) {
+		fprintf(stderr, "Empty swap-file\n");
+		exit(1);
+	}
 #endif
-    exit(0);
+	exit(0);
 }
 
 /*

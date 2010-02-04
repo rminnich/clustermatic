@@ -34,14 +34,14 @@
 #include <stdarg.h>
 #include <sys/wait.h>
 
-
 /* useful if compiling outside of node_up for testing */
 #if NO_NODEUP
 #define LOG_INFO 1
 #define LOG_ERROR 1
 
 #include <stdarg.h>
-void log_print(int level, char *fmt, ...) {
+void log_print(int level, char *fmt, ...)
+{
 	va_list valist;
 	int len;
 	char buffer[1024];
@@ -50,13 +50,14 @@ void log_print(int level, char *fmt, ...) {
 	len = vsnprintf(buffer, 1024, fmt, valist);
 	write(STDOUT_FILENO, buffer, len);
 	va_end(valist);
-}	
+}
 
-#else /* NO_NODEUP */
+#else				/* NO_NODEUP */
 #include "node_up.h"
-#endif /* NO_NODEUP */
+#endif				/* NO_NODEUP */
 
-int nodeup_postmove(int argc, char *argv[]) {
+int nodeup_postmove(int argc, char *argv[])
+{
 	pid_t pid = 0;
 	int wait_status = -1;
 	int rv;
@@ -71,18 +72,19 @@ int nodeup_postmove(int argc, char *argv[]) {
 	argc--;
 	argv++;
 
-	if (! argv[0] || argv[argc]) {
+	if (!argv[0] || argv[argc]) {
 		log_print(LOG_ERROR, "argv[0] or argv[%d] invalid\n", argc);
 		return -1;
 	}
-	
+
 	pid = fork();
 	if (pid == -1) {
-		log_print(LOG_ERROR, "fork died: %s: %s\n", argv[0], strerror(errno));
+		log_print(LOG_ERROR, "fork died: %s: %s\n", argv[0],
+			  strerror(errno));
 		return -1;
 	}
 	if (pid == 0) {
-		for(i=0; i<argc; i++) {
+		for (i = 0; i < argc; i++) {
 			// Just drop anything past 80
 			strncpy(log_str_cpy, log_str, 80);
 			snprintf(log_str, 80, "%s %s", log_str_cpy, argv[i]);
@@ -90,29 +92,30 @@ int nodeup_postmove(int argc, char *argv[]) {
 		log_print(LOG_INFO, "exec:%s\n", log_str);
 
 		execvp(argv[0], argv);
-		log_print(LOG_ERROR, "execvp failed for %s: %s\n", 
-			argv[0], strerror(errno));
+		log_print(LOG_ERROR, "execvp failed for %s: %s\n",
+			  argv[0], strerror(errno));
 		return -1;
 	}
 
-	while ((rv = waitpid(pid, &wait_status, 0)) == -1 && (errno == EINTR));
+	while ((rv = waitpid(pid, &wait_status, 0)) == -1 && (errno == EINTR)) ;
 
-	if (rv == -1) 	{
-		log_print(LOG_ERROR, "wait for %s: %d died: %s\n", 
-			argv[0], pid, strerror(errno));
+	if (rv == -1) {
+		log_print(LOG_ERROR, "wait for %s: %d died: %s\n",
+			  argv[0], pid, strerror(errno));
 		return -1;
 	}
 
 	if (!WIFEXITED(wait_status)) {
 		if (WIFSIGNALED(wait_status)) {
-			log_print(LOG_ERROR, "child failed with signal %d\n", WTERMSIG(wait_status));
-		}
-		else {
-			log_print(LOG_ERROR, "child failed with funny status\n");
+			log_print(LOG_ERROR, "child failed with signal %d\n",
+				  WTERMSIG(wait_status));
+		} else {
+			log_print(LOG_ERROR,
+				  "child failed with funny status\n");
 		}
 	}
 
-	return WIFEXITED(wait_status) ? WEXITSTATUS(wait_status): -1;
+	return WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : -1;
 }
 
 #if NO_NODEUP
@@ -120,8 +123,7 @@ int main(int argc, char *argv[])
 {
 	return nodeup_postmove(argc, argv);
 }
-#endif /* NO_NODEUP */
-
+#endif				/* NO_NODEUP */
 
 /*
  * Local variables:

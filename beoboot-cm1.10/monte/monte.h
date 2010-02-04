@@ -32,20 +32,20 @@
 #define MONTE_MAGIC_1 0x326b6d6f
 #define MONTE_MAGIC_2 0x6e746522
 
-#define MONTE_PROTECTED   0x00000001 /* jump to entry point in protected mode (default = real mode) */
-#define MONTE_PCI_DISABLE 0x00000002 /* disable PCI bus masters before restarting */
-#define MONTE_NOT_REALLY  0x80000000 /* do everything except actually restarting */
+#define MONTE_PROTECTED   0x00000001	/* jump to entry point in protected mode (default = real mode) */
+#define MONTE_PCI_DISABLE 0x00000002	/* disable PCI bus masters before restarting */
+#define MONTE_NOT_REALLY  0x80000000	/* do everything except actually restarting */
 struct monte_region_t {
-    void *addr;			/* Address in my memory space (must be page aligned) */
-    void *destaddr;		/* Address to put this stuff. (must be page aligned) */
-    long size;			/* The size of this region. */
+	void *addr;		/* Address in my memory space (must be page aligned) */
+	void *destaddr;		/* Address to put this stuff. (must be page aligned) */
+	long size;		/* The size of this region. */
 };
 
 struct monte_param_t {
-    int flags;
-    int nregions;
-    unsigned long entrypoint;	/* Address to jump to */
-    struct monte_region_t *regions;
+	int flags;
+	int nregions;
+	unsigned long entrypoint;	/* Address to jump to */
+	struct monte_region_t *regions;
 };
 
 /*--- User Interface ----------------------------------------------------*/
@@ -55,7 +55,7 @@ struct monte_boot_t *monte_new(int flags);
 int monte_boot(struct monte_boot_t *boot);
 int monte_load_linux_kernel(struct monte_boot_t *, const void *, long);
 int monte_load_linux_initrd(struct monte_boot_t *, const void *, long);
-int monte_load_linux_command_line  (struct monte_boot_t *boot, char *cmdline);
+int monte_load_linux_command_line(struct monte_boot_t *boot, char *cmdline);
 
 #endif
 /*

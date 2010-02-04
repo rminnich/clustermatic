@@ -39,65 +39,65 @@
 #include "node_up.h"
 
 MODULE_DESC("sysctl setup module");
-MODULE_INFO(
-"Usage: sysctl option value\n"
-);
+MODULE_INFO("Usage: sysctl option value\n");
 
 #define PROC_TMP "/.sysctl.proc.tmp"
 
-int nodeup_postmove(int argc, char *argv[]) {
-    int i, len, fd;
-    char *path, *val;
+int nodeup_postmove(int argc, char *argv[])
+{
+	int i, len, fd;
+	char *path, *val;
 
-    if (argc < 3) {
-	log_print(LOG_ERROR, "ERROR: Usage: sysctl key value\n");
-	return -1;
-    }
+	if (argc < 3) {
+		log_print(LOG_ERROR, "ERROR: Usage: sysctl key value\n");
+		return -1;
+	}
 
-    if (nodeup_mnt_proc(PROC_TMP))
-	return -1;
+	if (nodeup_mnt_proc(PROC_TMP))
+		return -1;
 
-    /* Arg 1 is the path */
-    path = alloca(strlen(argv[1])+strlen(PROC_TMP "/sys/") + 1);
-    strcpy(path, PROC_TMP "/sys/");
-    strcat(path, argv[1]);
+	/* Arg 1 is the path */
+	path = alloca(strlen(argv[1]) + strlen(PROC_TMP "/sys/") + 1);
+	strcpy(path, PROC_TMP "/sys/");
+	strcat(path, argv[1]);
 
-    /* Change dots to slashes in the path */
-    for (i=strlen(PROC_TMP "/sys/"); path[i]; i++)
-	if (path[i] == '.') path[i] = '/';
+	/* Change dots to slashes in the path */
+	for (i = strlen(PROC_TMP "/sys/"); path[i]; i++)
+		if (path[i] == '.')
+			path[i] = '/';
 
-    /*log_print(LOG_DEBUG, "PATH: %s\n", path);*/
-    
-    /* Build the value */
-    len = 0;
-    for (i=2; i < argc; i++)
-	len += strlen(argv[i]) + 1;
+	/*log_print(LOG_DEBUG, "PATH: %s\n", path); */
 
-    /*log_print(LOG_DEBUG, "VAL LEN: %d\n", len);*/
+	/* Build the value */
+	len = 0;
+	for (i = 2; i < argc; i++)
+		len += strlen(argv[i]) + 1;
 
-    val = alloca(len);
-    val[0] = 0;
-    for (i=2; i+1 < argc; i++) {
+	/*log_print(LOG_DEBUG, "VAL LEN: %d\n", len); */
+
+	val = alloca(len);
+	val[0] = 0;
+	for (i = 2; i + 1 < argc; i++) {
+		strcat(val, argv[i]);
+		strcat(val, " ");
+	}
 	strcat(val, argv[i]);
-	strcat(val, " ");
-    }
-    strcat(val, argv[i]);
 
-    log_print(LOG_INFO, "setting %s = \"%s\"\n", argv[1], val);
+	log_print(LOG_INFO, "setting %s = \"%s\"\n", argv[1], val);
 
-    /* Do the sysctl write */
-    fd = open(path, O_WRONLY);
-    if (fd == -1) {
-	log_print(LOG_ERROR, "%s: %s\n", path, strerror(errno));
-	return -1;
-    }
-    if (write(fd, val, strlen(val)) != strlen(val)) {
-    	log_print(LOG_ERROR, "write(%s): %s\n", path, strerror(errno));
+	/* Do the sysctl write */
+	fd = open(path, O_WRONLY);
+	if (fd == -1) {
+		log_print(LOG_ERROR, "%s: %s\n", path, strerror(errno));
+		return -1;
+	}
+	if (write(fd, val, strlen(val)) != strlen(val)) {
+		log_print(LOG_ERROR, "write(%s): %s\n", path, strerror(errno));
+		close(fd);
+		return -1;
+	}
 	close(fd);
-	return -1;
-    }
-    close(fd);
-    return 0;
+	return 0;
 }
 
 /*

@@ -44,16 +44,14 @@
 #include "node_up.h"
 
 MODULE_DESC("sysctl setup module");
-MODULE_INFO(
-"Usage: sysctl option value\n"
-);
+MODULE_INFO("Usage: sysctl option value\n");
 
 extern void kmod_modprobe(const char *name);
 asm(".weak kmod_modprobe");	/* weak extern */
 
 struct sym_t {
-    long addr;
-    char type;
+	long addr;
+	char type;
 };
 
 #define PROC_TMP "/.symdm.proc.tmp"
@@ -64,112 +62,120 @@ struct sym_t {
 #define SYMSIZE_MAX  100
 static
 int symdm_sym_callback(void *in_data, int in_size,
-		       void **out_data, int *out_size) {
-    char *kver, *symname;
-    char *symfilename;
-    FILE *symfile;
-    char line[SYMFILE_LINE];
+		       void **out_data, int *out_size)
+{
+	char *kver, *symname;
+	char *symfilename;
+	FILE *symfile;
+	char line[SYMFILE_LINE];
 
-    /* Grab the strings from the slave side */
-    kver = in_data;
-    symname = kver + strlen(kver)+1;
-    
-    /* Open the system map for this kernel.  This is presumed to live
-     * /boot/System.map-KVER */
+	/* Grab the strings from the slave side */
+	kver = in_data;
+	symname = kver + strlen(kver) + 1;
 
-    symfilename = alloca(strlen(kver) + 18);
-    sprintf(symfilename, "/boot/System.map-%s", kver);
-    symfile = fopen(symfilename, "r");
-    if (!symfile) {
-	log_print(LOG_ERROR, "%s: %s\n", symfilename, strerror(errno));
-    }
+	/* Open the system map for this kernel.  This is presumed to live
+	 * /boot/System.map-KVER */
 
-    /* Find the symbol entry we're looking for... */
-    while (fgets(line, SYMFILE_LINE, symfile)) {
-	char sym[SYMSIZE_MAX+1], type;
-	long addr;
-	if (sscanf(line, "%lx %c %" S(SYMSIZE_MAX) "s",&addr,&type,sym) != 3)
-	    continue;
-
-	if (strcmp(sym, symname) == 0) {
-	    struct sym_t *s;
-	    s = malloc(sizeof(*s));
-	    s->addr = addr;
-	    s->type = type;
-
-	    *out_data = s;
-	    *out_size = sizeof(*s);
-	    fclose(symfile);
-	    return 0;
+	symfilename = alloca(strlen(kver) + 18);
+	sprintf(symfilename, "/boot/System.map-%s", kver);
+	symfile = fopen(symfilename, "r");
+	if (!symfile) {
+		log_print(LOG_ERROR, "%s: %s\n", symfilename, strerror(errno));
 	}
-    }
-    fclose(symfile);
-    return 1;
+
+	/* Find the symbol entry we're looking for... */
+	while (fgets(line, SYMFILE_LINE, symfile)) {
+		char sym[SYMSIZE_MAX + 1], type;
+		long addr;
+		if (sscanf
+		    (line, "%lx %c %" S(SYMSIZE_MAX) "s", &addr, &type,
+		     sym) != 3)
+			continue;
+
+		if (strcmp(sym, symname) == 0) {
+			struct sym_t *s;
+			s = malloc(sizeof(*s));
+			s->addr = addr;
+			s->type = type;
+
+			*out_data = s;
+			*out_size = sizeof(*s);
+			fclose(symfile);
+			return 0;
+		}
+	}
+	fclose(symfile);
+	return 1;
 }
 
-int nodeup_postmove(int argc, char *argv[]) {
-    int i, fd;
-    char request[100 + SYMSIZE_MAX];
-    char symdmline[20 + SYMSIZE_MAX];
-    struct utsname unamebuf;
+int nodeup_postmove(int argc, char *argv[])
+{
+	int i, fd;
+	char request[100 + SYMSIZE_MAX];
+	char symdmline[20 + SYMSIZE_MAX];
+	struct utsname unamebuf;
 
-    if (argc < 3) {
-	log_print(LOG_ERROR, "ERROR: Usage: sysctl key value\n");
-	return -1;
-    }
-
-    if (!kmod_modprobe) {
-	log_print(LOG_ERROR, "kmod_modprobe undefined.\nsymdm requires "
-		  "kmod plugin.\n");
-	return -1;
-    }
-
-    if (nodeup_mnt_proc(PROC_TMP))
-	return -1;
-
-    uname(&unamebuf);
-
-    /* Start by loading the module */
-    kmod_modprobe("symdm");
-
-    /* Open the symdm interface */
-    fd = open(PROC_TMP "/symdm", O_WRONLY);
-    if (fd == -1) {
-	log_print(LOG_ERROR, PROC_TMP "/symdm: %s\n", strerror(errno));
-	return 1;
-    }
-    
-    for (i=1; i < argc; i++) {
-	struct sym_t *s;
-	int out_len = 0;
-
-	/* Make the request */
-	strcpy(request, unamebuf.release);
-	strcpy(request + strlen(unamebuf.release) + 1, argv[i]);
-	if (nodeup_rpc(symdm_sym_callback,
-		       request, strlen(unamebuf.release) + strlen(argv[i]) + 2,
-		       (void **) &s, &out_len) != 0) {
-	    log_print(LOG_WARNING, "WARNING: Failed to find symbol \"%s\"\n",
-		      argv[i]);
-	    continue;
+	if (argc < 3) {
+		log_print(LOG_ERROR, "ERROR: Usage: sysctl key value\n");
+		return -1;
 	}
 
-	sprintf(symdmline, "%lx %c %s", s->addr, s->type, argv[i]);
-	log_print(LOG_DEBUG,"Loading symbol \"%s\" = 0x%lx\n",argv[i],s->addr);
-	free(s);
-
-	/* Do the write to PROC_TMP/symdm */
-	lseek(fd, 0, SEEK_SET);
-	if (write(fd, symdmline, strlen(symdmline)) != strlen(symdmline)) {
-	    log_print(LOG_ERROR, "write(%s/symdm,\"%s\"): %s\n",
-		      PROC_TMP, symdmline, strerror(errno));
-	    close(fd);
-	    return 1;
+	if (!kmod_modprobe) {
+		log_print(LOG_ERROR, "kmod_modprobe undefined.\nsymdm requires "
+			  "kmod plugin.\n");
+		return -1;
 	}
-    }
 
-    close(fd);
-    return 0;
+	if (nodeup_mnt_proc(PROC_TMP))
+		return -1;
+
+	uname(&unamebuf);
+
+	/* Start by loading the module */
+	kmod_modprobe("symdm");
+
+	/* Open the symdm interface */
+	fd = open(PROC_TMP "/symdm", O_WRONLY);
+	if (fd == -1) {
+		log_print(LOG_ERROR, PROC_TMP "/symdm: %s\n", strerror(errno));
+		return 1;
+	}
+
+	for (i = 1; i < argc; i++) {
+		struct sym_t *s;
+		int out_len = 0;
+
+		/* Make the request */
+		strcpy(request, unamebuf.release);
+		strcpy(request + strlen(unamebuf.release) + 1, argv[i]);
+		if (nodeup_rpc(symdm_sym_callback,
+			       request,
+			       strlen(unamebuf.release) + strlen(argv[i]) + 2,
+			       (void **)&s, &out_len) != 0) {
+			log_print(LOG_WARNING,
+				  "WARNING: Failed to find symbol \"%s\"\n",
+				  argv[i]);
+			continue;
+		}
+
+		sprintf(symdmline, "%lx %c %s", s->addr, s->type, argv[i]);
+		log_print(LOG_DEBUG, "Loading symbol \"%s\" = 0x%lx\n", argv[i],
+			  s->addr);
+		free(s);
+
+		/* Do the write to PROC_TMP/symdm */
+		lseek(fd, 0, SEEK_SET);
+		if (write(fd, symdmline, strlen(symdmline)) !=
+		    strlen(symdmline)) {
+			log_print(LOG_ERROR, "write(%s/symdm,\"%s\"): %s\n",
+				  PROC_TMP, symdmline, strerror(errno));
+			close(fd);
+			return 1;
+		}
+	}
+
+	close(fd);
+	return 0;
 }
 
 /*

@@ -10,7 +10,7 @@ LIB_MAJ=4
 LIB_MIN=0
 LIB_PATCH=0
 
-BINS=bpsh
+BINS=bpsh 
 SOLINK=libbproc.so
 SONAME=$(SOLINK).$(LIB_MAJ)
 SO_LIB=$(SONAME).$(LIB_MIN).$(LIB_PATCH)
@@ -42,10 +42,10 @@ install: $(A_LIB) $(SO_LIB) $(BINS) compat_install
 #	-/sbin/ldconfig
 # Programs
 	install -s -m 755 bpsh            $(prefix)$(bindir)
-	install -s -m 755 bpcp            $(prefix)$(bindir)
-	install -s -m 755 bpstat          $(prefix)$(bindir)
-	install -s -m 755 bpctl           $(prefix)$(sbindir)
-	install -s -m 755 bplib           $(prefix)$(sbindir)
+#	install -s -m 755 bpcp            $(prefix)$(bindir)
+#	install -s -m 755 bpstat          $(prefix)$(bindir)
+#	install -s -m 755 bpctl           $(prefix)$(sbindir)
+#	install -s -m 755 bplib           $(prefix)$(sbindir)
 
 ##
 ##  Library stuff

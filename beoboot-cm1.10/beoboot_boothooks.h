@@ -37,16 +37,16 @@
 
 struct cmconf_option;
 struct boot_hook_t {
-    struct boot_hook_t *next;
-    char *name;		/* for logging purposes */
-    void (*func)(void);
+	struct boot_hook_t *next;
+	char *name;		/* for logging purposes */
+	void (*func) (void);
 };
 
 struct boot_conf_t {
-    struct boot_conf_t *next;
-    int phase;
-    char *tag;
-    struct cmconf_option *conflist;
+	struct boot_conf_t *next;
+	int phase;
+	char *tag;
+	struct cmconf_option *conflist;
 };
 
 /* These adding functions just add to the front of the list.  We have

@@ -45,21 +45,18 @@
 #include "node_up.h"
 
 MODULE_DESC("Library transfer module.");
-MODULE_INFO(
-"Usage: vmadlib\n"
-"    vmadlib transfers shared libraries to the slave node.  It looks at the\n"
-"    kernel library list (bplib -l) to get a list of libraries to transfer.\n"
-"    Once on the slave node, the slave's library list is setup and those\n"
-"    libraries are written out.  vmadlib will also create symlinks for the\n"
-"    sonames for the libraries which are transfered - just like ldconfig.\n"
-"\n"
-"Dependencies:\n"
-"    This plugin requires the miscfiles plugin to be loaded for transfer\n"
-"    of the library files.\n"
-);
+MODULE_INFO("Usage: vmadlib\n"
+	    "    vmadlib transfers shared libraries to the slave node.  It looks at the\n"
+	    "    kernel library list (bplib -l) to get a list of libraries to transfer.\n"
+	    "    Once on the slave node, the slave's library list is setup and those\n"
+	    "    libraries are written out.  vmadlib will also create symlinks for the\n"
+	    "    sonames for the libraries which are transfered - just like ldconfig.\n"
+	    "\n"
+	    "Dependencies:\n"
+	    "    This plugin requires the miscfiles plugin to be loaded for transfer\n"
+	    "    of the library files.\n");
 
-
-static int    liblist_size;
+static int liblist_size;
 static char **liblist;
 
 /*--------------------------------------------------------------------
@@ -71,42 +68,35 @@ static char **liblist;
  */
 
 /* This code is borrowed from the GNU C Library */
-static int
-_dl_cache_libcmp (const char *p1, const char *p2)
+static int _dl_cache_libcmp(const char *p1, const char *p2)
 {
-  while (*p1 != '\0')
-    {
-      if (*p1 >= '0' && *p1 <= '9')
-        {
-          if (*p2 >= '0' && *p2 <= '9')
-            {
-              /* Must compare this numerically.  */
-              int val1;
-              int val2;
+	while (*p1 != '\0') {
+		if (*p1 >= '0' && *p1 <= '9') {
+			if (*p2 >= '0' && *p2 <= '9') {
+				/* Must compare this numerically.  */
+				int val1;
+				int val2;
 
-              val1 = *p1++ - '0';
-              val2 = *p2++ - '0';
-              while (*p1 >= '0' && *p1 <= '9')
-                val1 = val1 * 10 + *p1++ - '0';
-              while (*p2 >= '0' && *p2 <= '9')
-                val2 = val2 * 10 + *p2++ - '0';
-              if (val1 != val2)
-                return val1 - val2;
-            }
-          else
-            return 1;
-        }
-      else if (*p2 >= '0' && *p2 <= '9')
-        return -1;
-      else if (*p1 != *p2)
-        return *p1 - *p2;
-      else
-        {
-          ++p1;
-          ++p2;
-        }
-    }
-  return *p1 - *p2;
+				val1 = *p1++ - '0';
+				val2 = *p2++ - '0';
+				while (*p1 >= '0' && *p1 <= '9')
+					val1 = val1 * 10 + *p1++ - '0';
+				while (*p2 >= '0' && *p2 <= '9')
+					val2 = val2 * 10 + *p2++ - '0';
+				if (val1 != val2)
+					return val1 - val2;
+			} else
+				return 1;
+		} else if (*p2 >= '0' && *p2 <= '9')
+			return -1;
+		else if (*p1 != *p2)
+			return *p1 - *p2;
+		else {
+			++p1;
+			++p2;
+		}
+	}
+	return *p1 - *p2;
 }
 
 /* This is a macro to try and avoid bad data in the ELF file.  We
@@ -119,221 +109,240 @@ _dl_cache_libcmp (const char *p1, const char *p2)
     }
 
 static
-char *get_soname(const char *filename) {
-    int fd, i;
-    struct stat statbuf;
-    void *data;
-    char *soname = 0, *dyn_strings = 0;
-    Elf32_Ehdr *ehdr_;
+char *get_soname(const char *filename)
+{
+	int fd, i;
+	struct stat statbuf;
+	void *data;
+	char *soname = 0, *dyn_strings = 0;
+	Elf32_Ehdr *ehdr_;
 
-    /* Step 1: Load the library into memory. */
-    if ((fd = open(filename, O_RDONLY)) == -1) {
-	log_print(LOG_ERROR, "%s: %s\n", filename, strerror(errno));
-	return 0;
-    }
+	/* Step 1: Load the library into memory. */
+	if ((fd = open(filename, O_RDONLY)) == -1) {
+		log_print(LOG_ERROR, "%s: %s\n", filename, strerror(errno));
+		return 0;
+	}
 
-    if (fstat(fd, &statbuf)) {
-	log_print(LOG_ERROR, "fstat(%s): %s\n", filename, strerror(errno));
+	if (fstat(fd, &statbuf)) {
+		log_print(LOG_ERROR, "fstat(%s): %s\n", filename,
+			  strerror(errno));
+		close(fd);
+		return 0;
+	}
+
+	data = mmap(0, statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
 	close(fd);
-	return 0;
-    }
+	if (data == MAP_FAILED) {
+		log_print(LOG_ERROR, "mmap(%s): %s\n", filename,
+			  strerror(errno));
+		return 0;
+	}
 
-    data = mmap(0, statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    close(fd);
-    if (data == MAP_FAILED) {
-	log_print(LOG_ERROR, "mmap(%s): %s\n", filename, strerror(errno));
-	return 0;
-    }
+	ehdr_ = data;
 
-    ehdr_ = data;
+	if (strncmp(ehdr_->e_ident, ELFMAG, SELFMAG) != 0) {
+		log_print(LOG_WARNING, "%s: Not an ELF object!\n", filename);
+		goto out_no_soname;
+	}
 
-    if (strncmp(ehdr_->e_ident, ELFMAG, SELFMAG) != 0) {
-	log_print(LOG_WARNING, "%s: Not an ELF object!\n", filename);
-	goto out_no_soname;
-    }
-
-    if (ehdr_->e_ident[EI_CLASS] == ELFCLASS32) {
-	Elf32_Ehdr *ehdr;
-	Elf32_Phdr *phdr;
-	Elf32_Dyn  *dyn = 0;
-	Elf32_Addr loadaddr = -1;
+	if (ehdr_->e_ident[EI_CLASS] == ELFCLASS32) {
+		Elf32_Ehdr *ehdr;
+		Elf32_Phdr *phdr;
+		Elf32_Dyn *dyn = 0;
+		Elf32_Addr loadaddr = -1;
 
 	/*------------------------------------------------*/
-	/* THIS CHUNK IS THE SAME FOR 32-bit and 64-bit */
-	ehdr = data;
-	if (ehdr->e_type != ET_DYN) {
-	    log_print(LOG_WARNING,"%s: Not an ELF Dynamic object!\n",filename);
-	    goto out_no_soname;
-	}
+		/* THIS CHUNK IS THE SAME FOR 32-bit and 64-bit */
+		ehdr = data;
+		if (ehdr->e_type != ET_DYN) {
+			log_print(LOG_WARNING,
+				  "%s: Not an ELF Dynamic object!\n", filename);
+			goto out_no_soname;
+		}
 
-	/* Find the program headers using the ELF header */
-	phdr = data + ehdr->e_phoff;
-	CHECK_PTR(phdr, sizeof(*phdr) * ehdr->e_phnum);
+		/* Find the program headers using the ELF header */
+		phdr = data + ehdr->e_phoff;
+		CHECK_PTR(phdr, sizeof(*phdr) * ehdr->e_phnum);
 
-	/* Look through the program header entries */
-	for (i=0; i < ehdr->e_phnum; i++) {
-	    switch(phdr[i].p_type) {
-	    case PT_LOAD:
-		if (loadaddr == -1) 
-		    loadaddr = phdr[i].p_vaddr - phdr[i].p_offset;
-		break;
-	    case PT_DYNAMIC:
-		dyn = data + phdr[i].p_offset;
-		CHECK_PTR(dyn, phdr[i].p_filesz);
-		break;
-	    }
-	}
-	if (loadaddr == -1) loadaddr = 0;
-	if (!dyn) goto out_no_soname;
-	
-	/* One pass to find the string table */
-	for (i=0; dyn[i].d_tag != DT_NULL; i++) {
-	    CHECK_PTR(&dyn[i], sizeof(*dyn)*2);
-	    if (dyn[i].d_tag == DT_STRTAB) {
-		dyn_strings = data + (dyn[i].d_un.d_val - loadaddr);
-		CHECK_PTR(dyn_strings, 0);
-		break;
-	    }
-	}
-	if (!dyn_strings) goto out_no_soname;
-	
-	for (i=0; dyn[i].d_tag != DT_NULL; i++) {
-	    if (dyn[i].d_tag == DT_SONAME) {
-		soname = dyn_strings + dyn[i].d_un.d_val;
-		CHECK_PTR(soname, 0);
-		break;
-	    }
-	}
+		/* Look through the program header entries */
+		for (i = 0; i < ehdr->e_phnum; i++) {
+			switch (phdr[i].p_type) {
+			case PT_LOAD:
+				if (loadaddr == -1)
+					loadaddr =
+					    phdr[i].p_vaddr - phdr[i].p_offset;
+				break;
+			case PT_DYNAMIC:
+				dyn = data + phdr[i].p_offset;
+				CHECK_PTR(dyn, phdr[i].p_filesz);
+				break;
+			}
+		}
+		if (loadaddr == -1)
+			loadaddr = 0;
+		if (!dyn)
+			goto out_no_soname;
+
+		/* One pass to find the string table */
+		for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
+			CHECK_PTR(&dyn[i], sizeof(*dyn) * 2);
+			if (dyn[i].d_tag == DT_STRTAB) {
+				dyn_strings =
+				    data + (dyn[i].d_un.d_val - loadaddr);
+				CHECK_PTR(dyn_strings, 0);
+				break;
+			}
+		}
+		if (!dyn_strings)
+			goto out_no_soname;
+
+		for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
+			if (dyn[i].d_tag == DT_SONAME) {
+				soname = dyn_strings + dyn[i].d_un.d_val;
+				CHECK_PTR(soname, 0);
+				break;
+			}
+		}
 	/*------------------------------------------------*/
-    } else if (ehdr_->e_ident[EI_CLASS] == ELFCLASS64) {
-	Elf64_Ehdr *ehdr;
-	Elf64_Phdr *phdr;
-	Elf64_Dyn  *dyn = 0;
-	Elf64_Addr loadaddr = (Elf64_Addr) -1;
+	} else if (ehdr_->e_ident[EI_CLASS] == ELFCLASS64) {
+		Elf64_Ehdr *ehdr;
+		Elf64_Phdr *phdr;
+		Elf64_Dyn *dyn = 0;
+		Elf64_Addr loadaddr = (Elf64_Addr) - 1;
 
 	/*------------------------------------------------*/
-	/* THIS CHUNK IS THE SAME FOR 32-bit and 64-bit */
-	ehdr = data;
-	if (ehdr->e_type != ET_DYN) {
-	    log_print(LOG_WARNING,"%s: Not an ELF Dynamic object!\n",filename);
-	    goto out_no_soname;
-	}
+		/* THIS CHUNK IS THE SAME FOR 32-bit and 64-bit */
+		ehdr = data;
+		if (ehdr->e_type != ET_DYN) {
+			log_print(LOG_WARNING,
+				  "%s: Not an ELF Dynamic object!\n", filename);
+			goto out_no_soname;
+		}
 
-	/* Find the program headers using the ELF header */
-	phdr = data + ehdr->e_phoff;
-	CHECK_PTR(phdr, sizeof(*phdr) * ehdr->e_phnum);
+		/* Find the program headers using the ELF header */
+		phdr = data + ehdr->e_phoff;
+		CHECK_PTR(phdr, sizeof(*phdr) * ehdr->e_phnum);
 
-	/* Look through the program header entries */
-	for (i=0; i < ehdr->e_phnum; i++) {
-	    switch(phdr[i].p_type) {
-	    case PT_LOAD:
-		if (loadaddr == -1) 
-		    loadaddr = phdr[i].p_vaddr - phdr[i].p_offset;
-		break;
-	    case PT_DYNAMIC:
-		dyn = data + phdr[i].p_offset;
-		CHECK_PTR(dyn, phdr[i].p_filesz);
-		break;
-	    }
-	}
-	if (loadaddr == -1) loadaddr = 0;
-	if (!dyn) goto out_no_soname;
-	
-	/* One pass to find the string table */
-	for (i=0; dyn[i].d_tag != DT_NULL; i++) {
-	    CHECK_PTR(&dyn[i], sizeof(*dyn)*2);
-	    if (dyn[i].d_tag == DT_STRTAB) {
-		dyn_strings = data + (dyn[i].d_un.d_val - loadaddr);
-		CHECK_PTR(dyn_strings, 0);
-		break;
-	    }
-	}
-	if (!dyn_strings) goto out_no_soname;
-	
-	for (i=0; dyn[i].d_tag != DT_NULL; i++) {
-	    if (dyn[i].d_tag == DT_SONAME) {
-		soname = dyn_strings + dyn[i].d_un.d_val;
-		CHECK_PTR(soname, 0);
-		break;
-	    }
-	}
+		/* Look through the program header entries */
+		for (i = 0; i < ehdr->e_phnum; i++) {
+			switch (phdr[i].p_type) {
+			case PT_LOAD:
+				if (loadaddr == -1)
+					loadaddr =
+					    phdr[i].p_vaddr - phdr[i].p_offset;
+				break;
+			case PT_DYNAMIC:
+				dyn = data + phdr[i].p_offset;
+				CHECK_PTR(dyn, phdr[i].p_filesz);
+				break;
+			}
+		}
+		if (loadaddr == -1)
+			loadaddr = 0;
+		if (!dyn)
+			goto out_no_soname;
+
+		/* One pass to find the string table */
+		for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
+			CHECK_PTR(&dyn[i], sizeof(*dyn) * 2);
+			if (dyn[i].d_tag == DT_STRTAB) {
+				dyn_strings =
+				    data + (dyn[i].d_un.d_val - loadaddr);
+				CHECK_PTR(dyn_strings, 0);
+				break;
+			}
+		}
+		if (!dyn_strings)
+			goto out_no_soname;
+
+		for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
+			if (dyn[i].d_tag == DT_SONAME) {
+				soname = dyn_strings + dyn[i].d_un.d_val;
+				CHECK_PTR(soname, 0);
+				break;
+			}
+		}
 	/*------------------------------------------------*/
-    } else {
-	log_print(LOG_WARNING, "%s: Bad ELF class!\n", filename);
-	goto out_no_soname;
-    }
-    if (soname)
-	soname = strdup(soname);
- out_no_soname:
-    munmap(data, statbuf.st_size);
-    return soname;
+	} else {
+		log_print(LOG_WARNING, "%s: Bad ELF class!\n", filename);
+		goto out_no_soname;
+	}
+	if (soname)
+		soname = strdup(soname);
+      out_no_soname:
+	munmap(data, statbuf.st_size);
+	return soname;
 }
 
 static
-int link_library(const char *libpath) {
-    int r;
-    char *file_name, *soname;
-    char *link_path;
-    struct stat statbuf;
-    char existing_link[PATH_MAX+1];
+int link_library(const char *libpath)
+{
+	int r;
+	char *file_name, *soname;
+	char *link_path;
+	struct stat statbuf;
+	char existing_link[PATH_MAX + 1];
 
-    /* Sanity checking */
-    if (libpath[0] != '/') {
-	log_print(LOG_ERROR, "%s: link_library only works for "
-		  "absolute paths.\n", libpath);
-	return -1;
-    }
-
-    soname = get_soname(libpath);
-    if (!soname) {
-	log_print(LOG_INFO, "%s no SONAME.  Not and ELF object?\n", libpath);
-	return 0;
-    }
-
-    /* allocate some memory for the string */
-    link_path  = alloca(strlen(libpath) + strlen(soname) + 1);
-    file_name  = strrchr(libpath, '/') + 1;
-    sprintf(link_path, "%.*s%s", (int) (file_name - libpath),
-	    libpath, soname);
-    free(soname);
-
-    log_print(LOG_DEBUG, "%s: SONAME is %s\n", link_path, file_name);
-
-    if (lstat(link_path, &statbuf) == 0) {
-	if (!S_ISLNK(statbuf.st_mode)) {
-	    /* This is not a link, skip over it */
-	    log_print(LOG_INFO, "%s exists and is not a link. (ignoring)\n",
-		      link_path);
-	    return 0;
+	/* Sanity checking */
+	if (libpath[0] != '/') {
+		log_print(LOG_ERROR, "%s: link_library only works for "
+			  "absolute paths.\n", libpath);
+		return -1;
 	}
 
-	r = readlink(link_path, existing_link, PATH_MAX);
-	if (r == -1) {
-	    log_print(LOG_ERROR, "readlink(%s): %s\n", link_path,
-		      strerror(errno));
-	    return -1;
+	soname = get_soname(libpath);
+	if (!soname) {
+		log_print(LOG_INFO, "%s no SONAME.  Not and ELF object?\n",
+			  libpath);
+		return 0;
 	}
-	existing_link[r] = 0;	/* readlink doesn't null terminate */
 
-	if (_dl_cache_libcmp(file_name, existing_link) > 0) {
-	    /* This library is newer - replace the link */
-	    log_print(LOG_INFO, "Re-linking %s -> %s\n", link_path, file_name);
-	    unlink(link_path);
+	/* allocate some memory for the string */
+	link_path = alloca(strlen(libpath) + strlen(soname) + 1);
+	file_name = strrchr(libpath, '/') + 1;
+	sprintf(link_path, "%.*s%s", (int)(file_name - libpath),
+		libpath, soname);
+	free(soname);
+
+	log_print(LOG_DEBUG, "%s: SONAME is %s\n", link_path, file_name);
+
+	if (lstat(link_path, &statbuf) == 0) {
+		if (!S_ISLNK(statbuf.st_mode)) {
+			/* This is not a link, skip over it */
+			log_print(LOG_INFO,
+				  "%s exists and is not a link. (ignoring)\n",
+				  link_path);
+			return 0;
+		}
+
+		r = readlink(link_path, existing_link, PATH_MAX);
+		if (r == -1) {
+			log_print(LOG_ERROR, "readlink(%s): %s\n", link_path,
+				  strerror(errno));
+			return -1;
+		}
+		existing_link[r] = 0;	/* readlink doesn't null terminate */
+
+		if (_dl_cache_libcmp(file_name, existing_link) > 0) {
+			/* This library is newer - replace the link */
+			log_print(LOG_INFO, "Re-linking %s -> %s\n", link_path,
+				  file_name);
+			unlink(link_path);
+		} else {
+			/* This library is older - don't replace the link */
+			return 0;
+		}
 	} else {
-	    /* This library is older - don't replace the link */
-	    return 0;
+		log_print(LOG_INFO, "Linking %s -> %s\n", link_path, file_name);
 	}
-    } else {
-	log_print(LOG_INFO, "Linking %s -> %s\n", link_path, file_name);
-    }
 
-    /* Create the link */
-    if (symlink(file_name, link_path)) {
-	log_print(LOG_ERROR, "symlink(\"%s\", \"%s\"): %s\n",
-		  file_name, link_path, strerror(errno));
-	return -1;
-    }
-    return 0;
+	/* Create the link */
+	if (symlink(file_name, link_path)) {
+		log_print(LOG_ERROR, "symlink(\"%s\", \"%s\"): %s\n",
+			  file_name, link_path, strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 /*--------------------------------------------------------------------
@@ -346,81 +355,89 @@ extern int miscfiles_postmove(int argc, char *argv[]);
 /*asm(".weak miscfiles_premove");*/
 /*asm(".weak miscfiles_postmove");*/
 
-int vmadlib_premove(int argc, char *argv[]) {
-    int i;
-    char *p;
-    char *libs;
+int vmadlib_premove(int argc, char *argv[])
+{
+	int i;
+	char *p;
+	char *libs;
 
 #if 0
-    if (!miscfiles_premove) {
-	if (nodeup_require_module("miscfiles")) {
+	if (!miscfiles_premove) {
+		if (nodeup_require_module("miscfiles")) {
 
+		}
 	}
-    }
 #endif
 
-    /* Grab the lib list from the kernel */
-    if (bproc_liblist(&libs) == -1) {
-	log_print(LOG_ERROR, "bproc_liblist failed: %s\n", strerror(errno));
-	return -1;
-    }
+	/* Grab the lib list from the kernel */
+	if (bproc_liblist(&libs) == -1) {
+		log_print(LOG_ERROR, "bproc_liblist failed: %s\n",
+			  strerror(errno));
+		return -1;
+	}
 
-    /* Create an argv style list of strings out of this list */
-    liblist_size = 0;
-    for (p = libs; *p; p = p+strlen(p)+1) liblist_size++;
-    log_print(LOG_INFO, "library list contains %d libraries\n", liblist_size);
+	/* Create an argv style list of strings out of this list */
+	liblist_size = 0;
+	for (p = libs; *p; p = p + strlen(p) + 1)
+		liblist_size++;
+	log_print(LOG_INFO, "library list contains %d libraries\n",
+		  liblist_size);
 
-    if (!(liblist = malloc(sizeof(*liblist) * (liblist_size+1)))) {
-	log_print(LOG_ERROR, "out of memory\n");
-	return -1;
-    }
+	if (!(liblist = malloc(sizeof(*liblist) * (liblist_size + 1)))) {
+		log_print(LOG_ERROR, "out of memory\n");
+		return -1;
+	}
 
-    /* Convert it */
-    for (p = libs, i=0; *p; p = p+strlen(p)+1)
-	liblist[i++] = p;
-    liblist[i] = 0;
+	/* Convert it */
+	for (p = libs, i = 0; *p; p = p + strlen(p) + 1)
+		liblist[i++] = p;
+	liblist[i] = 0;
 
-    if (!miscfiles_premove) {
-	log_print(LOG_ERROR, "vmadlib requires \n");
-    }
+	if (!miscfiles_premove) {
+		log_print(LOG_ERROR, "vmadlib requires \n");
+	}
 
-    /* Load the libraries into RAM */
-    return miscfiles_premove(liblist_size+1, liblist - 1);
+	/* Load the libraries into RAM */
+	return miscfiles_premove(liblist_size + 1, liblist - 1);
 }
 
-int vmadlib_postmove(int argc, char *argv[]) {
-    int i, ret;
+int vmadlib_postmove(int argc, char *argv[])
+{
+	int i, ret;
 
-    if (bproc_libclear() != 0) {
-	log_print(LOG_ERROR, "bproc_libclear failed: %s\n", strerror(errno));
-	return -1;
-    }
-    log_print(LOG_DEBUG, "cleared library list on node %d\n", nodeup_node);
-
-    log_print(LOG_DEBUG, "liblist_size = %d;\n", liblist_size);
-    for (i=0; i < liblist_size; i++) {
-	if (bproc_libadd(liblist[i]) != 0) {
-	    log_print(LOG_ERROR, "bproc_libadd(\"%s\") failed: %s\n",
-		      liblist[i], strerror(errno));
-	    return -1;
+	if (bproc_libclear() != 0) {
+		log_print(LOG_ERROR, "bproc_libclear failed: %s\n",
+			  strerror(errno));
+		return -1;
 	}
-	log_print(LOG_DEBUG, "added library \"%s\"\n", liblist[i]);
-    }
+	log_print(LOG_DEBUG, "cleared library list on node %d\n", nodeup_node);
 
-    /* Write out the files and do the ldconfig stuff. */
-    ret = miscfiles_postmove(liblist_size+1, liblist - 1);
-    if (ret) return ret;
+	log_print(LOG_DEBUG, "liblist_size = %d;\n", liblist_size);
+	for (i = 0; i < liblist_size; i++) {
+		if (bproc_libadd(liblist[i]) != 0) {
+			log_print(LOG_ERROR,
+				  "bproc_libadd(\"%s\") failed: %s\n",
+				  liblist[i], strerror(errno));
+			return -1;
+		}
+		log_print(LOG_DEBUG, "added library \"%s\"\n", liblist[i]);
+	}
 
-    for (i=0; i < liblist_size; i++)
-	if (link_library(liblist[i]))
-	    ret = -1;
-    return ret;
+	/* Write out the files and do the ldconfig stuff. */
+	ret = miscfiles_postmove(liblist_size + 1, liblist - 1);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < liblist_size; i++)
+		if (link_library(liblist[i]))
+			ret = -1;
+	return ret;
 }
 
 int nodeup_premove(int argc, char *argv[])
-  __attribute__((alias ("vmadlib_premove")));
+    __attribute__ ((alias("vmadlib_premove")));
 int nodeup_postmove(int argc, char *argv[])
-  __attribute__((alias ("vmadlib_postmove")));
+    __attribute__ ((alias("vmadlib_postmove")));
 
 /*
  * Local variables:

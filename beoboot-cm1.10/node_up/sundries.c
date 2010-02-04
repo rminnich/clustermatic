@@ -21,45 +21,45 @@ void die(char *s)
 	exit(1);
 }
 
-void *
-xmalloc (size_t size) {
-     void *t;
+void *xmalloc(size_t size)
+{
+	void *t;
 
-     if (size == 0)
-          return NULL;
+	if (size == 0)
+		return NULL;
 
-     t = malloc (size);
-     if (t == NULL)
-          die ("not enough memory");
+	t = malloc(size);
+	if (t == NULL)
+		die("not enough memory");
 
-     return t;
+	return t;
 }
 
-char *
-xstrdup (const char *s) {
-     char *t;
+char *xstrdup(const char *s)
+{
+	char *t;
 
-     if (s == NULL)
-          return NULL;
+	if (s == NULL)
+		return NULL;
 
-     t = strdup (s);
+	t = strdup(s);
 
-     if (t == NULL)
-          die ("not enough memory");
+	if (t == NULL)
+		die("not enough memory");
 
-     return t;
+	return t;
 }
 
-char *
-xstrndup (const char *s, int n) {
-     char *t;
+char *xstrndup(const char *s, int n)
+{
+	char *t;
 
-     if (s == NULL)
-	  die ("bug in xstrndup call");
+	if (s == NULL)
+		die("bug in xstrndup call");
 
-     t = xmalloc(n+1);
-     strncpy(t,s,n);
-     t[n] = 0;
+	t = xmalloc(n + 1);
+	strncpy(t, s, n);
+	t[n] = 0;
 
-     return t;
+	return t;
 }

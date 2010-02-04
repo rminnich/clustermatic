@@ -1,6 +1,6 @@
 //int main(int argc, char *argv[]);
 
-//#include "../defines.h"		/* for HAVE_locale_h */
+//#include "../defines.h"               /* for HAVE_locale_h */
 
 #ifndef PACKAGE
 #define PACKAGE	"util-linux"
@@ -24,11 +24,9 @@
 # endif
 #else
 # undef bindtextdomain
-# define bindtextdomain(Domain, Directory) /* empty */
+# define bindtextdomain(Domain, Directory)	/* empty */
 # undef textdomain
-# define textdomain(Domain) /* empty */
+# define textdomain(Domain)	/* empty */
 # define _(Text) (Text)
 # define N_(Text) (Text)
 #endif
-
-

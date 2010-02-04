@@ -37,65 +37,59 @@
 #include <net/ethernet.h>	/* for ETH_ALEN */
 #include <netinet/in.h>		/* for struct in_addr */
 
-
 /*--------------------------------------------------------------------
  * Stuff for use by RARP callers
  */
 #define BOOTFILE_MAXLEN 100
 
 struct rarp_if_t {
-    /* Information about interface */
-    char  name[IFNAMSIZ];
-    int   index;
-    int   flags;
-    char  hwaddr[ETH_ALEN];
+	/* Information about interface */
+	char name[IFNAMSIZ];
+	int index;
+	int flags;
+	char hwaddr[ETH_ALEN];
 
-    /* Data from RARP response */
-    struct in_addr server_ip;
-    struct in_addr my_ip;
-    struct in_addr netmask;
-    /* XXX Do we want to stick a network gateway in here ? */
-    int            bproc_port;
-    int            mcast_port;
-    char           boot_file[BOOTFILE_MAXLEN+1];
+	/* Data from RARP response */
+	struct in_addr server_ip;
+	struct in_addr my_ip;
+	struct in_addr netmask;
+	/* XXX Do we want to stick a network gateway in here ? */
+	int bproc_port;
+	int mcast_port;
+	char boot_file[BOOTFILE_MAXLEN + 1];
 };
 
 extern struct rarp_if_t rarp_if_list[];
-extern int              rarp_if_list_len;
+extern int rarp_if_list_len;
 
 /* Functions for external use */
-int  rarp_init(void);
-int  rarp_add_interface(const char *ifname);
-int  rarp_add_all(void);
-int  rarp_do_rarp(int delay, int timeout);
-int  rarp_configure(struct rarp_if_t *ifc);
-int  rarp_configure_all(void);
+int rarp_init(void);
+int rarp_add_interface(const char *ifname);
+int rarp_add_all(void);
+int rarp_do_rarp(int delay, int timeout);
+int rarp_configure(struct rarp_if_t *ifc);
+int rarp_configure_all(void);
 
 #if 0
-int  rarp_prepare_interface(const char *ifname);
-int  rarp_prepare_all_interfaces(void);
+int rarp_prepare_interface(const char *ifname);
+int rarp_prepare_all_interfaces(void);
 void rarp_down_all(void);
 #endif
-
-
 
 /*--------------------------------------------------------------------
  * Internal RARP stuff
  */
 struct arpdata_eth_ip {
-    unsigned char src_eth[6];
-    unsigned char src_ip[4];
-    unsigned char tgt_eth[6];
-    unsigned char tgt_ip[4];
-    unsigned char netmask[4];
-    struct bproc_version_t version;
-    uint16_t      bproc_port;
-    uint16_t      mcast_port;
-    char          boot_file[BOOTFILE_MAXLEN+1];
+	unsigned char src_eth[6];
+	unsigned char src_ip[4];
+	unsigned char tgt_eth[6];
+	unsigned char tgt_ip[4];
+	unsigned char netmask[4];
+	struct bproc_version_t version;
+	uint16_t bproc_port;
+	uint16_t mcast_port;
+	char boot_file[BOOTFILE_MAXLEN + 1];
 };
-
-
-
 
 #endif
 

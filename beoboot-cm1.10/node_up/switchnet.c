@@ -43,65 +43,68 @@
 
 #include "rarp.h"
 
-int nodeup_postmove(int argc, char *argv[]) {
-    int i, sa_size;
-    struct rarp_if_t *ifc;
-    struct sockaddr_in remote, local;
-    char tmp[30];
+int nodeup_postmove(int argc, char *argv[])
+{
+	int i, sa_size;
+	struct rarp_if_t *ifc;
+	struct sockaddr_in remote, local;
+	char tmp[30];
 
-    log_print(LOG_DEBUG, "switching to %s\n", argv[1]);
+	log_print(LOG_DEBUG, "switching to %s\n", argv[1]);
 
-    /* Find RARP information for this interface in the list of RARP
-     * responses. */
-    for (i=0; i < rarp_if_list_len; i++) {
-	ifc = &rarp_if_list[i];
-	if (strcmp(argv[1], ifc->name) == 0 &&
-	    ifc->bproc_port != 0) {
-	    break;
+	/* Find RARP information for this interface in the list of RARP
+	 * responses. */
+	for (i = 0; i < rarp_if_list_len; i++) {
+		ifc = &rarp_if_list[i];
+		if (strcmp(argv[1], ifc->name) == 0 && ifc->bproc_port != 0) {
+			break;
+		}
 	}
-    }
-    if (i == rarp_if_list_len) {
-	log_print(LOG_ERROR, "No completed RARP for %s found.\n", argv[1]);
-	return -1;
-    }
+	if (i == rarp_if_list_len) {
+		log_print(LOG_ERROR, "No completed RARP for %s found.\n",
+			  argv[1]);
+		return -1;
+	}
 
-    remote.sin_family = AF_INET;
-    remote.sin_addr   = ifc->server_ip;
-    remote.sin_port   = htons(ifc->bproc_port);
-    local.sin_family  = AF_INET;
-    local.sin_addr    = ifc->my_ip;
-    local.sin_port    = 0;
+	remote.sin_family = AF_INET;
+	remote.sin_addr = ifc->server_ip;
+	remote.sin_port = htons(ifc->bproc_port);
+	local.sin_family = AF_INET;
+	local.sin_addr = ifc->my_ip;
+	local.sin_port = 0;
 
-    strcpy(tmp, inet_ntoa(local.sin_addr));
-    log_print(LOG_INFO, "reconnecting %s:%d -> %s:%d\n",
-	      tmp, ntohs(local.sin_port), inet_ntoa(remote.sin_addr),
-	      ntohs(remote.sin_port));
-    if (bproc_nodereconnect(BPROC_NODE_SELF, /*nodeup_node(0),*/
-			    (struct sockaddr *) &remote, sizeof(remote),
-			    (struct sockaddr *) &local,  sizeof(local)) != 0) {
-	log_print(LOG_ERROR, "bproc_nodereconnect: %s\n", strerror(errno));
-	return -1;
-    }
+	strcpy(tmp, inet_ntoa(local.sin_addr));
+	log_print(LOG_INFO, "reconnecting %s:%d -> %s:%d\n",
+		  tmp, ntohs(local.sin_port), inet_ntoa(remote.sin_addr),
+		  ntohs(remote.sin_port));
+	if (bproc_nodereconnect(BPROC_NODE_SELF,	/*nodeup_node(0), */
+				(struct sockaddr *)&remote, sizeof(remote),
+				(struct sockaddr *)&local,
+				sizeof(local)) != 0) {
+		log_print(LOG_ERROR, "bproc_nodereconnect: %s\n",
+			  strerror(errno));
+		return -1;
+	}
 
-    log_print(LOG_INFO, "switchnet completed successfully.\n");
+	log_print(LOG_INFO, "switchnet completed successfully.\n");
 
-    /* Our address and master address are different after this point
-     * so re-fetch that information and update what the other node_up
-     * modules will see. */
-    sa_size = sizeof(nodeup_master);
-    if (bproc_nodeaddr(BPROC_NODE_MASTER, (struct sockaddr *)
-		       &nodeup_master, &sa_size) == -1) {
-	log_print(LOG_ERROR, "Failed to get address of master node: %s\n",
-		  strerror(errno));
-	return -1;
-    }
-    
-    /* XXX We should reconnect the socket we're using for
-     * communication here too since we will may want to down that
-     * interface later on. */
-    return 0;
+	/* Our address and master address are different after this point
+	 * so re-fetch that information and update what the other node_up
+	 * modules will see. */
+	sa_size = sizeof(nodeup_master);
+	if (bproc_nodeaddr(BPROC_NODE_MASTER, (struct sockaddr *)
+			   &nodeup_master, &sa_size) == -1) {
+		log_print(LOG_ERROR,
+			  "Failed to get address of master node: %s\n",
+			  strerror(errno));
+		return -1;
+	}
+
+	/* XXX We should reconnect the socket we're using for
+	 * communication here too since we will may want to down that
+	 * interface later on. */
+	return 0;
 }
-
 
 /*
  * Local variables:
