@@ -916,7 +916,6 @@ syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
 		/* weirdly it seems bproc forwarding current sends all the same port. But let's plan for the future. 
 		 * new socket for each port (soon)
 		 */
-		fprintf(stderr, "connect ports\n");
 		for(i = 0; i < 3; i++) {
 			addr.sin_addr = c->raddr.sin_addr;
 			addr.sin_family = AF_INET;

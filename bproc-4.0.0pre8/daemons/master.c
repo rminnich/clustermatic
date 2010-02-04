@@ -235,7 +235,7 @@ static time_t cookie_seq = 0;
 static char *log_arg0;
 static int log_opts;
 
-static int ignore_version = 0;
+static int ignore_version = 1;
 static int clientconnect;	/*, listenfd; */
 
 static int epoll_fd;
@@ -2254,7 +2254,6 @@ int client_msg_in(struct conn_t *c, struct request_t *req)
 	hdr = bproc_msg(req);
 	switch (hdr->req) {
 	case BPROC_RUN:{
-printf("CLIENT RUN\n");
 		struct node_t *s;
 		/* and the ONLY thing we do right now is take a run request */
 		/* in the standard format ... */
@@ -2263,7 +2262,6 @@ printf("CLIENT RUN\n");
 		s = find_node_by_number(0);
 		if (! s)
 			return;
-printf("SNED IT\n");
 		send_msg(s, -1, req);
 		break;
 	}
@@ -2447,7 +2445,6 @@ void conn_read(struct conn_t *c)
 
 	while (1) {
 		if (c->ireq) {
-printf("CONTINUING\n");
 			/* Continue on partial request */
 			hdr = bproc_msg(c->ireq);
 			size = hdr->size - c->ioffset;
@@ -2465,7 +2462,6 @@ printf("CONTINUING\n");
 				return;
 			}
 			c->ioffset += r;
-printf("CONTINUING ioffset %d size %d\n", c->ioffset, hdr->size);
 
 			if (c->ioffset == hdr->size) {
 				/* message complete */
@@ -2476,7 +2472,6 @@ printf("CONTINUING ioffset %d size %d\n", c->ioffset, hdr->size);
 				c->ireq = 0;
 			}
 		} else {
-printf("NEW\n");
 	    /*--- New request - read into ibuffer first ---*/
 			size = sizeof(c->ibuffer) - c->ioffset;
 
@@ -2507,7 +2502,6 @@ printf("NEW\n");
 					remove_connection(c);
 					return;
 				}
-printf("NEW ioffset %d size %d\n", c->ioffset, hdr->size);
 				c->ireq = req_get(hdr->size);
 				if (c->ioffset >= hdr->size) {
 					/* Complete message case */
