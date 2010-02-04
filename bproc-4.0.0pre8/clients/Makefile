@@ -16,7 +16,7 @@ SONAME=$(SOLINK).$(LIB_MAJ)
 SO_LIB=$(SONAME).$(LIB_MIN).$(LIB_PATCH)
 A_LIB=libbproc.a
 
-LIBOBJS:=bproc.o
+LIBOBJS:=bproc.o ldd.o
 # This crud is so that we can work on systems whose C libraries.  The
 # build rules are basically the same except that we need use the
 # headers from our linux source tree to the syscall number in this
@@ -84,6 +84,7 @@ compat_clean:
 
 bproc.32.o: bproc.c ../include/bproc.h sys/bproc.h sys/bproc_common.h
 xattr.32.o: xattr.c xattr.h
+ldd.o: ldd.c
 
 $(A_LIB32): $(LIBOBJS:%.o=%_32.o)
 	ar cru $(A_LIB32) $^
