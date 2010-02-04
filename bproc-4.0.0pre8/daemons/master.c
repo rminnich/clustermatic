@@ -1594,10 +1594,18 @@ void remove_slave_connection(struct conn_t *conn)
 static
 void remove_client_connection(struct conn_t *conn)
 {
+	struct epoll_event ev;
 
+
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL,conn->fd, &ev)) {
+			syslog(LOG_ERR, 
+				"remove_client_connection: fd %d: epoll_ctl(EPOLL_CTL_DEL): %s",
+				conn->fd, strerror(errno));
+	}
 	(void) close(conn->fd);
 	conn->fd = -1;
 	conn->type = -1;
+	conn->state = CONN_DEAD;
 }
 
 static
@@ -2981,10 +2989,13 @@ int main(int argc, char *argv[])
 						accept_new_client();
 						break;
 					case CLIENT:
+						/* FIXME: this double check is bogus */
 						conn = &connections[whatfd];
 						if (conn->state == CONN_DEAD)
 							break;
 						conn_read(conn);
+						if (conn->state == CONN_DEAD)
+							break;
 						conn_update_epoll(conn);
 						break;
 					case SLAVE_CONNECT:
