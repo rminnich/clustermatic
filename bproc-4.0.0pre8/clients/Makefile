@@ -4,7 +4,7 @@
 # $Id: Makefile,v 1.60 2004/10/09 01:07:48 mkdist Exp $
 
 include ../Makefile.conf
-LIBS+=-L. -lbproc
+LIBS+=-L. -lbproc -lelf
 
 LIB_MAJ=4
 LIB_MIN=0

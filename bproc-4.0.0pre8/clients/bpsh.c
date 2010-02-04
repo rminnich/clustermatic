@@ -852,6 +852,8 @@ static
 int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen,
 		    const char *progname, int argc, char **argv)
 {
+	int xp_ldd(const char *binary, char *sysroot, char ***deps);
+
 	int i, r;
 	FILE *iostream;
 	unsigned char *data, *cp, *edata, *count;
@@ -859,14 +861,25 @@ int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen
 	int envc;
 	int bpmaster;
 	int datalen = 2*1048576;
-	char cmd[128];
+	static char cmd[4096], *ecmd = &cmd[4095], *cur;
 	struct bproc_message_hdr_t *hdr;
+	char **libs;
 	
 	/* The rank probably won't be interesting to the child process but
 	 * who knows... */
 	setenv("BPROC_RANK", "XXXXXXX", 1);
 	setenv("BPROC_PROGNAME", progname, 1);
-	sprintf(cmd, "ls %s | cpio -H newc -o", progname);
+	xp_ldd(progname, "/", &libs);
+	cur = cmd;
+	cur += snprintf(cmd, ecmd-cur, "ls ");
+	for(i = 0; libs[i]; i++) {
+		/* simple mode: ignore libc. future complex mode: ?? */
+		if (strstr(libs[i], "libc.so"))
+			continue;
+		cur += snprintf(cur, ecmd-cur, "%s ", libs[i]); 
+	}
+	cur += snprintf(cur, ecmd-cur, " | cpio -H newc -o");
+fprintf(stderr, "CMD %s\n", cmd);
 	iostream = popen(cmd, "r");
 
 	/* format: Command (1), length(6), null(1), lines of: 

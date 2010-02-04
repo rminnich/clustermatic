@@ -158,7 +158,7 @@ add_dep(Deplist *dl, char *name, char *rpath)
 }
 
 static int
-find_deps(Deplist *dl, char *pathname)
+find_deps(Deplist *dl, const char *pathname)
 {
 	int fd, n;
 	char *rpath;
@@ -170,7 +170,7 @@ find_deps(Deplist *dl, char *pathname)
 	Elf_Data *data;
 
 	if ((fd = open(pathname, O_RDONLY)) == -1) {
-		sp_uerror(errno);
+		perror(pathname);
 		return -1;
 	}
 
@@ -229,7 +229,7 @@ parse_conf(char *file)
 	int n = 0, i, result;
 	glob_t libglob;
 
-	line = sp_malloc(PATH_MAX);
+	line = malloc(PATH_MAX);
 	if(!line)
 		return NULL;
 
@@ -273,7 +273,7 @@ parse_conf(char *file)
 							if (!ret)
 								return NULL;
 
-							ret[n] = sp_malloc(PATH_MAX);
+							ret[n] = malloc(PATH_MAX);
 							strcpy(ret[n], *temp);
 							n++;
 							temp++;
@@ -288,11 +288,11 @@ parse_conf(char *file)
 				break;
 
 			case GLOB_NOSPACE:
-				fprintf(stderr, Enomem, EIO, line);
+				fprintf(stderr, "Out of memory at %s\n", line);
 				break;
 
 			case GLOB_ABORTED:
-				fprintf(stderr, "%s: Cannot read directory: %s\n", EIO, file, line);
+				fprintf(stderr, "%s: Cannot read directory: %s\n", file, line);
 				break;
 			}
 
@@ -300,7 +300,7 @@ parse_conf(char *file)
 			ret = realloc(ret, (n+1)*sizeof(char *));
 			if (!ret)
 				return NULL;
-			ret[n] = sp_malloc(PATH_MAX);
+			ret[n] = malloc(PATH_MAX);
 			strcpy(ret[n], line);
 			n++;
 		}
@@ -328,7 +328,7 @@ parse_path(char *path)
 		s++;
 	}
 
-	ret = sp_malloc(n*sizeof(char *) + strlen(path));
+	ret = malloc(n*sizeof(char *) + strlen(path));
 	if (!ret)
 		return NULL;
 
@@ -448,7 +448,7 @@ init_paths(Deplist *dl)
 }
 
 int
-xp_ldd(char *binary, char *sysroot, char ***deps)
+xp_ldd(const char *binary, char *sysroot, char ***deps)
 {
 	int i, n, len;
 	char **ret, *s;
@@ -466,19 +466,19 @@ xp_ldd(char *binary, char *sysroot, char ***deps)
 	init_paths(&dl);
 
 	if (find_deps(&dl, binary) < 0) {
-		fprintf(stderr, "cannot parse file %s", EIO, binary);
+		fprintf(stderr, "cannot parse file %s", binary);
 		goto done;
 	}
 
 	cdep = dl.deps;
 	while (cdep != NULL) {
 		if (locate_dep(&dl, cdep) < 0) {
-			fprintf(stderr, "cannot find %s", EIO, cdep->name);
+			fprintf(stderr, "cannot find %s", cdep->name);
 			goto done;
 		}
 
 		if (find_deps(&dl, cdep->path) < 0) {
-			fprintf(stderr, "cannot parse file %s", EIO, cdep->path);
+			fprintf(stderr, "cannot parse file %s", cdep->path);
 			goto done;
 		}
 
@@ -494,7 +494,7 @@ xp_ldd(char *binary, char *sysroot, char ***deps)
 		n++;
 	}
 
-	ret = sp_malloc((n+1) * sizeof(char *) + len);
+	ret = malloc((n+1) * sizeof(char *) + len);
 	if (!ret) {
 		n = -1;
 		goto done;
