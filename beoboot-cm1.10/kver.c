@@ -89,7 +89,7 @@ int uncompress_kernel(char *img)
 		dup2(fd, STDOUT_FILENO);
 		fd = open("/dev/null", O_WRONLY);
 		dup2(fd, STDERR_FILENO);
-		execlp("gzip", "gzip", "-cd", img, 0);
+		execlp("gzip", "gzip", "-cd", img, NULL);
 		exit(1);
 	}
 
@@ -120,12 +120,17 @@ long get_zImage_offset(char *filename)
 	if (!file)
 		return -1;
 	fseek(file, ZSIGOFF, SEEK_SET);	/* Check signature */
-	fread(buffer, 1, ZSIGLEN, file);
+	if (fread(buffer, 1, ZSIGLEN, file) < ZSIGLEN) {
+		fprintf(stderr, "read of ZSIGLEN failed\n");
+	}
+		
 	if (memcmp(buffer, ZSIG, ZSIGLEN) != 0)
 		goto bail;
 
 	fseek(file, ZVEROFF, SEEK_SET);	/* Read offset of version */
-	fread(buffer, 1, 2, file);
+	if (fread(buffer, 1, 2, file) < 2) {
+		fprintf(stderr, "read of ZVER failed\n");
+	}
 	offset = ((int)buffer[0]) + (((int)buffer[1]) << 8) + 0x200;
       bail:
 	fclose(file);
@@ -173,7 +178,9 @@ int main(int argc, char *argv[])
 			/* XXX This will probably barf in the cross-architecture
 			 * case... */
 			fseek(file, offset, SEEK_SET);
-			fread(&buf, 1, sizeof(buf), file);
+			if (fread(&buf, 1, sizeof(buf), file) < sizeof(buf)) {
+				fprintf(stderr, "read of sizeof(buf) failed\n");
+			}
 			puts(buf.release);
 			fclose(file);
 			continue;
@@ -188,7 +195,9 @@ int main(int argc, char *argv[])
 				fclose(file);
 				file = fopen(tempfilename, "r");
 				fseek(file, offset, SEEK_SET);
-				fread(&buf, 1, sizeof(buf), file);
+				if (fread(&buf, 1, sizeof(buf), file) < sizeof(buf)) {
+					fprintf(stderr, "read of sizeof(buf) failed\n");
+				}
 				puts(buf.release);
 				fclose(file);
 				unlink(tempfilename);

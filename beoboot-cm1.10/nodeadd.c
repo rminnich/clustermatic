@@ -123,7 +123,7 @@ void daemon_reload(void)
 {
 	/* This could be neater */
 	printf("Sending SIGHUP to beoserv.\n");
-	system("killall -HUP beoserv");
+	(void) system("killall -HUP beoserv");
 }
 
 static
