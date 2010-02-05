@@ -16,7 +16,7 @@ SONAME=$(SOLINK).$(LIB_MAJ)
 SO_LIB=$(SONAME).$(LIB_MIN).$(LIB_PATCH)
 A_LIB=libbproc.a
 
-LIBOBJS:=bproc.o ldd.o
+LIBOBJS:=bproc.o
 # This crud is so that we can work on systems whose C libraries.  The
 # build rules are basically the same except that we need use the
 # headers from our linux source tree to the syscall number in this
@@ -109,7 +109,7 @@ endif
 ##  Client programs
 ##
 bsh.o:    bsh.c    ../include/bproc.h
-bpsh.o:   bpsh.c   ../include/bproc.h
+bpsh.o:   bpsh.c   ldd.c ../include/bproc.h
 bpcp.o:   bpcp.c   ../include/bproc.h
 bpctl.o:  bpctl.c  ../include/bproc.h
 bplib.o:  bplib.c  ../include/bproc.h
@@ -118,8 +118,8 @@ bpstat.o: bpstat.c  ../include/bproc.h
 
 bsh: bsh.o $(SOLINK)
 	$(CC) bsh.o -o bsh $(LIBS)
-bpsh: bpsh.o  $(SOLINK)
-	$(CC) bpsh.o -o bpsh $(LIBS)
+bpsh: bpsh.o  ldd.o $(SOLINK)
+	$(CC) bpsh.o ldd.o -o bpsh $(LIBS)
 bpcp: bpcp.o $(SOLINK)
 	$(CC) bpcp.o -o bpcp $(LIBS)
 bpstat: bpstat.o $(SOLINK)

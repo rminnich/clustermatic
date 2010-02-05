@@ -793,14 +793,14 @@ buildarr(char **source, int *count, char ***list)
 	int i;
 	char *cp = *source;
 syslog(LOG_NOTICE, "cp %p %s", cp, cp);
-	*count = strtoul(cp, 0, 0);
+	*count = strtoul(cp, 0, 10);
 syslog(LOG_NOTICE, "COUNT %d", *count);
 	/* alloc an extra for NULL terminating the array */
 	arr = calloc(*count + 1, sizeof(char *));
-	while (isdigit(*cp))
+	while (*cp)
 		cp++;
 	cp++;
-	
+syslog(LOG_NOTICE, "cp %p %s", cp, cp);	
 	for(i = 0; i < *count; i++){
 syslog(LOG_NOTICE, "cp %p", cp);
 		arr[i] = cp;
@@ -870,19 +870,27 @@ do_run(struct conn_t *c, struct request_t *req)
 	char **ports;
 	int portc;
 	struct sockaddr_in addr;
+	char *packstart;
+	int packoff;
 
 	hdr = (struct bproc_message_hdr_t *)msg;
 	len = hdr->size;
 	cp = msg + sizeof(*hdr);
+	/* get the packet start. Nodes will start at 8 bytes past this point. */
+	packoff = strtoul(cp, 0, 10);
+	packstart = cp + packoff;
+	syslog(LOG_NOTICE, "do_run: cp %p packoff %d packstart %p", cp, packoff, packstart);
+	cp += 8;
 	syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
 	syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
 	buildarr(&cp, &nodec, &nodes);
+	cp = packstart;
 	buildarr(&cp, &argc, &argv);
 syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
 	buildarr(&cp, &envc, &env);
 	
 	/* get the flags */
-	flags = strtoul(cp, 0, 0);
+	flags = strtoul(cp, 0, 10);
 	cp += strlen(cp) + 1;
 	syslog(LOG_NOTICE, "flags %d\n", flags);
 	/* host IP and ports */
@@ -905,6 +913,7 @@ syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
 	fwrite(cp, 1,  cpiolen, p);
 	fclose(p);
 	/* let's run it. */
+syslog(LOG_NOTICE, "ready to go");
 	if (fork() == 0) {
 		int fd;
 		int pid = getpid();
@@ -916,7 +925,7 @@ syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
 		for(i = 0; i < 3; i++) {
 			addr.sin_addr = c->raddr.sin_addr;
 			addr.sin_family = AF_INET;
-			addr.sin_port = htons(strtoul(ports[i], 0, 0));
+			addr.sin_port = htons(strtoul(ports[i], 0, 10));
 			fd = setup_iofw(&addr);
 			write(fd, &pid, sizeof(pid));
 			write(fd, &i, sizeof(i));

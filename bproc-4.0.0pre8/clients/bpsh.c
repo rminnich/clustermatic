@@ -863,6 +863,7 @@ int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen
 	int datalen = 2*1048576;
 	static char cmd[4096], *ecmd = &cmd[4095], *cur;
 	struct bproc_message_hdr_t *hdr;
+	unsigned char *packstart;
 	char **libs;
 	
 	/* The rank probably won't be interesting to the child process but
@@ -899,11 +900,17 @@ fprintf(stderr, "CMD %s\n", cmd);
 
 	data = calloc(datalen, sizeof(*data));
 
-	/* now set up the data with the proper info. First 16 bytes will be command "R" and length in textual form. */
 	edata = data + datalen;
 	hdr = (struct bproc_message_hdr_t *) data;
 	hdr->req = BPROC_RUN;
 	cp = data + sizeof(*hdr);
+	/* packstart is 8 bytes, shows where packet "after" the nodes starts */
+	/* this allows master to rewrite the "nodes" part of a request without 
+	 * changing the rest of the packet. It is a decimal number, with trailing nulls. 
+	 * 8 bytes is ridiculous but guarantees we never have to think about over-run. 
+	 */
+	packstart = cp; 
+	cp += 8;
 	/* Nodes go first because the master may have to rewrite them. */
 	cp += snprintf(cp, edata-cp, "%d", num_nodes);
 	*cp++ = 0;
@@ -912,6 +919,8 @@ fprintf(stderr, "CMD %s\n", cmd);
 		*cp++ = 0;
 	}
 
+	snprintf(packstart, 7, "%d", (int)(cp-packstart));
+	fprintf(stderr, "packstart %s\n", packstart);
 	cp += snprintf(cp, edata-cp, "%d", argc);
 	*cp++ = 0;
 	for(i = 0; i < argc; i++) {
@@ -942,7 +951,7 @@ fprintf(stderr, "CMD %s\n", cmd);
 
 	
 	/* now read in the cpio archive. */
-	
+	fprintf(stderr, "cpio is at offset %d\n", (int)(cp-data));
 	amt = fread(cp, 1, edata-cp, iostream);
 	pclose(iostream);
 	cp += amt;
