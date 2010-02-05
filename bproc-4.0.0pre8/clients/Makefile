@@ -32,9 +32,6 @@ clean: compat_clean
 	rm -f *.o $(BINS) $(SO_LIB) $(A_LIB) $(SONAME) $(SOLINK)
 
 install: $(A_LIB) $(SO_LIB) $(BINS) compat_install
-# Headers
-	install -m 644 sys/bproc.h        $(prefix)$(includedir)/sys
-	install -m 644 sys/bproc_common.h $(prefix)$(includedir)/sys
 # Libraries
 	install -m 644 $(A_LIB)           $(prefix)$(libdir)
 	install -m 755 $(SO_LIB)          $(prefix)$(libdir)
@@ -53,7 +50,7 @@ install: $(A_LIB) $(SO_LIB) $(BINS) compat_install
 %.o: %.c
 	$(CC) -fPIC $(CFLAGS) $(DEFS) -c -o $@ $<
 
-bproc.o: bproc.c ../include/bproc.h sys/bproc.h sys/bproc_common.h
+bproc.o: bproc.c ../include/bproc.h 
 xattr.o: xattr.c xattr.h
 
 $(A_LIB): $(LIBOBJS)
@@ -82,7 +79,7 @@ compat_clean:
 %_32.o: %.c
 	$(COMPAT32_CC) -fPIC $(COMPAT32_CFLAGS) $(DEFS) -c -o $@ $<
 
-bproc.32.o: bproc.c ../include/bproc.h sys/bproc.h sys/bproc_common.h
+bproc.32.o: bproc.c ../include/bproc.h
 xattr.32.o: xattr.c xattr.h
 ldd.o: ldd.c
 
@@ -111,13 +108,13 @@ endif
 ##
 ##  Client programs
 ##
-bsh.o:    bsh.c    sys/bproc.h sys/bproc_common.h
-bpsh.o:   bpsh.c   sys/bproc.h sys/bproc_common.h
-bpcp.o:   bpcp.c   sys/bproc.h sys/bproc_common.h
-bpctl.o:  bpctl.c  sys/bproc.h sys/bproc_common.h
-bplib.o:  bplib.c  sys/bproc.h sys/bproc_common.h
+bsh.o:    bsh.c    ../include/bproc.h
+bpsh.o:   bpsh.c   ../include/bproc.h
+bpcp.o:   bpcp.c   ../include/bproc.h
+bpctl.o:  bpctl.c  ../include/bproc.h
+bplib.o:  bplib.c  ../include/bproc.h
 
-bpstat.o: bpstat.c sys/bproc.h  sys/bproc_common.h
+bpstat.o: bpstat.c  ../include/bproc.h
 
 bsh: bsh.o $(SOLINK)
 	$(CC) bsh.o -o bsh $(LIBS)

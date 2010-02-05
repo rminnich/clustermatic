@@ -13,14 +13,13 @@ clean:
 	rm -f $(ALL) *.o
 
 bptrace.o: bptrace.c list.h debug.h ../include/bproc.h \
-  ../clients/sys/bproc_common.h messages.h
+ messages.h
 cmconf.o: cmconf.c list.h cmconf.h
-db.o: db.c ../include/bproc.h ../clients/sys/bproc_common.h \
-  ../clients/sys/bproc.h
-master.o: master.c ../include/bproc.h ../clients/sys/bproc_common.h \
-  ../clients/sys/bproc.h list.h cmconf.h messages.h debug.h
-slave.o: slave.c list.h ../include/bproc.h ../clients/sys/bproc_common.h \
-  ../clients/sys/bproc.h messages.h debug.h
+db.o: db.c ../include/bproc.h 
+master.o: master.c ../include/bproc.h  \
+	list.h cmconf.h messages.h debug.h
+slave.o: slave.c list.h ../include/bproc.h  \
+  messages.h debug.h
 
 
 bptrace: bptrace.o

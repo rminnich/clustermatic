@@ -641,7 +641,6 @@ struct sockaddr;
 
 #include <stdint.h>
 #include <sys/socket.h>
-#include <sys/bproc_common.h>
 
 struct bproc_node_set_t {
     int size, alloc;
@@ -779,8 +778,6 @@ int bproc_nodespec(struct bproc_node_set_t *ns, const char *str);
 }
 #endif
 #endif
-#endif
-
 /*
  * Local variables:
  * c-basic-offset: 4

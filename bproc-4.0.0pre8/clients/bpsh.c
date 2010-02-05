@@ -42,7 +42,7 @@
 #include <netinet/in.h>
 #include <sys/wait.h>
 #include <bproc.h>
-#include <sys/bproc.h>
+#include <bproc.h>
 #include <sched.h>
 
 #include <arpa/inet.h>

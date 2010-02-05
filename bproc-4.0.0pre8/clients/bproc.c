@@ -40,7 +40,7 @@
 #include <ctype.h>
 
 #include "bproc.h"		/* This is the header from ../kernel */
-#include <sys/bproc.h>
+#include <bproc.h>
 
 #ifdef NO_XATTR
 /* A lot of libcs out there don't have the get/setxattr system calls.

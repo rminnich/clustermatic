@@ -51,8 +51,6 @@
 
 #include "list.h"
 #include "bproc.h"
-#include <sys/bproc.h>
-
 #include "messages.h"		/* daemon-only messages */
 
 int start_iod(void);

@@ -54,7 +54,6 @@
 #include <sched.h>
 
 #include "bproc.h"
-#include <sys/bproc.h>
 
 #include "list.h"
 #include "cmconf.h"
