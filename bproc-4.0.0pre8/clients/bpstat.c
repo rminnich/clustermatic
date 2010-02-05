@@ -314,7 +314,7 @@ void print_node_number(char *_arg)
 			break;
 		}
 #else
-#warning print_node_number is busted.
+	printf("print node number is busted\n");
 #endif
 
 	}
