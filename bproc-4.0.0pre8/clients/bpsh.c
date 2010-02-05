@@ -850,7 +850,7 @@ connectbpmaster(void)
 }
 static
 int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen,
-		    const char *progname, int argc, char **argv, struct bproc_node_set_t *node_list)
+		    const char *progname, int argc, char **argv)
 {
 	int xp_ldd(const char *binary, char *sysroot, char ***deps);
 
@@ -904,6 +904,14 @@ fprintf(stderr, "CMD %s\n", cmd);
 	hdr = (struct bproc_message_hdr_t *) data;
 	hdr->req = BPROC_RUN;
 	cp = data + sizeof(*hdr);
+	/* Nodes go first because the master may have to rewrite them. */
+	cp += snprintf(cp, edata-cp, "%d", num_nodes);
+	*cp++ = 0;
+	for (i = 0; i < num_nodes; i++){
+		cp += snprintf(cp, edata-cp, "%d", nodes[i].node);
+		*cp++ = 0;
+	}
+
 	cp += snprintf(cp, edata-cp, "%d", argc);
 	*cp++ = 0;
 	for(i = 0; i < argc; i++) {
@@ -933,15 +941,6 @@ fprintf(stderr, "CMD %s\n", cmd);
 	}
 
 	
-	/* no nodes yet. */
-	cp += snprintf(cp, edata-cp, "%d", num_nodes);
-	*cp++ = 0;
-	for (i = 0; i < num_nodes; i++){
-		cp += snprintf(cp, edata-cp, "%d", i);
-		*cp++ = 0;
-	}
-	
-
 	/* now read in the cpio archive. */
 	
 	amt = fread(cp, 1, edata-cp, iostream);
@@ -1266,7 +1265,7 @@ int main(int argc, char *argv[])
 
 	if (time_cmd)
 		gettimeofday(&start, 0);
-	r = start_processes(&hostaddr, io, 3, progname, cmd_argc, cmd_argv, &node_list);
+	r = start_processes(&hostaddr, io, 3, progname, cmd_argc, cmd_argv);
 	if (sockfd != -1)
 		stop_accepter();
 	if (r)

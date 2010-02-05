@@ -876,6 +876,7 @@ do_run(struct conn_t *c, struct request_t *req)
 	cp = msg + sizeof(*hdr);
 	syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
 	syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
+	buildarr(&cp, &nodec, &nodes);
 	buildarr(&cp, &argc, &argv);
 syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
 	buildarr(&cp, &envc, &env);
@@ -889,8 +890,6 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
 	cp += strlen(cp) + 1;
 	buildarr(&cp, &portc, &ports);
 	/* nodes */
-syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
-	buildarr(&cp, &nodec, &nodes);
 	/* now do the cpio unpack */
 	/* let's depend on having a cpio command for now. */
 syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
