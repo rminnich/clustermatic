@@ -381,7 +381,6 @@ static
 struct request_t *req_get(int size)
 {
 	struct request_t *req;
-fprintf(stderr, "allocate %d\n", (int) (sizeof(*req) + size));
 	req = smalloc(sizeof(*req) + size);
 	return req;
 }
@@ -2304,9 +2303,7 @@ void set_index(struct request_t *req, int i)
 	cp = msg + sizeof(*hdr);
 	/* skip the packet start */
 	cp += 8;
-fprintf(stderr, "Write %d at offset %d\n", i, (int) (cp-msg));
 	(void)snprintf(cp, 8, "%07d", i);
-fprintf(stderr, "and it is: %s\n", cp);
 }
 /* "ghost" is a little dated in this function name. */
 /* we don't talk to the client much at all. They send a request to 
@@ -2531,7 +2528,6 @@ void conn_read(struct conn_t *c)
 			size = hdr->size - c->ioffset;
 
 			r = read(c->fd, ((void *)hdr) + c->ioffset, size);
-fprintf(stderr, "Read %d bytes\n", r);
 			if (r == -1) {
 				if (errno == EAGAIN)
 					return;
@@ -2657,6 +2653,7 @@ int conn_write_refill(struct conn_t *c)
 		}
 		break;
 	case CONN_DEAD:
+		fprintf(stderr, "CONN_DEAD: should never happen\n");
 		abort();	/* should never happen */
 	}
 
@@ -2738,8 +2735,10 @@ void send_msg(struct node_t *s, int clientfd, struct request_t *req)
 {
 	if (s) {
 		list_add_tail(&req->list, &s->reqs);
-		if (!s->running)
+		if (!s->running) {
+			fprintf(stderr, "%s:%d: slave %d is not running\n", __FUNCTION__, __LINE__, s->id);
 			abort();
+		}
 
 		if (conn_out_empty(s->running)) {
 			conn_write_refill(s->running);
