@@ -33,7 +33,7 @@
 
 #include <netinet/in.h>
 #include <netdb.h>
-#include <sys/bproc.h>
+#include "bproc.h"
 
 static struct bproc_node_set_t node_list = BPROC_EMPTY_NODESET;
 
