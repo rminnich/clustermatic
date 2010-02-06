@@ -36,7 +36,7 @@
 #include <netdb.h>
 #include <getopt.h>
 
-#include <sys/bproc.h>
+#include "bproc.h"
 
 static
 char *ip2str(struct sockaddr_in *addr)
@@ -263,6 +263,7 @@ struct bproc_node_info_t *get_node_info(int *nodes, int len, int *ni_size)
 }
 #endif
 
+#if 0
 /*--------------------------------------------------------------------
  * Short tid-bits good for scripts
  */
@@ -285,7 +286,6 @@ void print_process_state(void)
 		printf("%d\t%d\n", procmap[i].pid, procmap[i].node);
 	free(procmap);
 }
-
 static
 void print_node_number(char *_arg)
 {
@@ -379,6 +379,7 @@ void grok_ps()
 	if (pmap)
 		free(pmap);
 }
+#endif
 
 void Usage(char *arg0)
 {
@@ -530,6 +531,7 @@ int main(int argc, char *argv[])
 			break;
 
 			/* Misc stuff */
+#if 0
 		case 'A':
 			print_node_number(optarg);
 			exit(0);
@@ -539,6 +541,7 @@ int main(int argc, char *argv[])
 		case 'P':
 			grok_ps();
 			exit(0);
+#endif
 
 		case 'U':
 			continuous = 1;
@@ -564,13 +567,13 @@ int main(int argc, char *argv[])
 
 	status_fd = bproc_notifier();
 	if (status_fd == -1) {
-		fprintf(stderr, "bproc_notifier: %s\n", bproc_strerror(errno));
+		fprintf(stderr, "bproc_notifier fails\n");
 		exit(1);
 	}
 
       again:
 	if (bproc_nodelist_(&ns_all, status_fd) == -1) {
-		fprintf(stderr, "bproc_nodelist_: %s\n", bproc_strerror(errno));
+		fprintf(stderr, "bproc_nodelist_: \n");
 		exit(1);
 	}
 
