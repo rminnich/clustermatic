@@ -381,7 +381,20 @@ static
 struct request_t *req_get(int size)
 {
 	struct request_t *req;
+fprintf(stderr, "allocate %d\n", (int) (sizeof(*req) + size));
 	req = smalloc(sizeof(*req) + size);
+	return req;
+}
+
+static
+struct request_t *req_clone(struct request_t *oldreq)
+{
+	struct request_t *req;
+	struct bproc_message_hdr_t *msg;
+	msg = bproc_msg(oldreq);
+	/* use req_get in case the free list comes back */
+	req = req_get(msg->size);
+	memcpy(req, oldreq, msg->size + sizeof(*req));
 	return req;
 }
 
@@ -2236,7 +2249,65 @@ int accept_new_client(void)
 	return 0;
 }
 
+/* be sensitivre to possible bad messages from clients. */
+int
+run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
+{
+	char *msg = bproc_msg(req), *cp;
+	struct bproc_message_hdr_t *hdr;
+	int i, len;
+	int maxnodes, actualnodes;
+	struct node_t **list;
+	/* unpack the request node list, and for each node, see if it is "real" */
+	/* Just use the count they pass, if there is less, that is ok */
+	hdr = (struct bproc_message_hdr_t *)msg;
+	len = hdr->size;
+	cp = msg + sizeof(*hdr);
+	/* skip packoff, we don't care */
+	cp += 8;
+	/* skip index */
+	cp += strlen(cp) + 1;
+	if (len < (int)(cp-msg)){
+		return 0;
+	}
+	maxnodes = strtoul(cp, 0, 10);
+	/* is it sane? This simple test captures much badness. It also ensures we can at least start on the path. */
+	if (maxnodes > len)
+		return 0;
+	*s = calloc(maxnodes, sizeof(*s));
+	if (! *s)
+		return 0;
+	list = *s;
+	for(i = actualnodes = 0; i < maxnodes; i++) {
+		cp += strlen(cp) + 1;
+		if (len < (int)(cp-msg)){
+			free(*s);
+			return 0;
+		}
+		if (*list = find_node_by_number(strtoul(cp, 0, 10)))
+			list++, actualnodes++;
+	}
+	if (! actualnodes){
+		free(*s);
+		*s = NULL;
+	}
 
+	return actualnodes;
+
+}
+
+void set_index(struct request_t *req, int i)
+{
+	char *msg = bproc_msg(req), *cp;
+	struct bproc_message_hdr_t *hdr;
+	hdr = (struct bproc_message_hdr_t *)msg;
+	cp = msg + sizeof(*hdr);
+	/* skip the packet start */
+	cp += 8;
+fprintf(stderr, "Write %d at offset %d\n", i, (int) (cp-msg));
+	(void)snprintf(cp, 8, "%07d", i);
+fprintf(stderr, "and it is: %s\n", cp);
+}
 /* "ghost" is a little dated in this function name. */
 /* we don't talk to the client much at all. They send a request to 
  * start a proc and we let them know if anything happened. That's about it. 
@@ -2253,15 +2324,26 @@ int client_msg_in(struct conn_t *c, struct request_t *req)
 	hdr = bproc_msg(req);
 	switch (hdr->req) {
 	case BPROC_RUN:{
-		struct node_t *s;
-		/* and the ONLY thing we do right now is take a run request */
-		/* in the standard format ... */
-		/* we have the message, now interpret it. */
-		/* for now, just send to first slave and see if it can run it. */
-		s = find_node_by_number(0);
-		if (! s)
-			return;
-		send_msg(s, -1, req);
+		int i;
+		struct node_t **s;
+		int nodecount;
+		struct request_t *nreq;
+
+		nodecount = run_nodes(c, req, &s);
+
+		/* don't rewrite header (yet) */
+		for(i = 0; i < nodecount-1; i++) {
+			nreq = req_clone(req);
+			set_index(req, s[i]->id);
+			/* need to adjust the "index" of this set of nodes, so they pick the right ports */
+			send_msg(s[i], -1, req);
+			req = nreq;
+		}
+		if (i < nodecount){
+			set_index(req, s[i]->id);
+			send_msg(s[i], -1, req);
+		}
+		free(s);
 		break;
 	}
 	default:{
@@ -2449,6 +2531,7 @@ void conn_read(struct conn_t *c)
 			size = hdr->size - c->ioffset;
 
 			r = read(c->fd, ((void *)hdr) + c->ioffset, size);
+fprintf(stderr, "Read %d bytes\n", r);
 			if (r == -1) {
 				if (errno == EAGAIN)
 					return;

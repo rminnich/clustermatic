@@ -871,7 +871,7 @@ do_run(struct conn_t *c, struct request_t *req)
 	int portc;
 	struct sockaddr_in addr;
 	char *packstart;
-	int packoff;
+	int packoff, node;
 
 	hdr = (struct bproc_message_hdr_t *)msg;
 	len = hdr->size;
@@ -881,6 +881,9 @@ do_run(struct conn_t *c, struct request_t *req)
 	packstart = cp + packoff;
 	syslog(LOG_NOTICE, "do_run: cp %p packoff %d packstart %p", cp, packoff, packstart);
 	cp += 8;
+	node = strtoul(cp, 0, 10);
+syslog(LOG_NOTICE, "index @ %d i %s %d", (int)(cp-msg),cp, node);
+	cp += strlen(cp) + 1;
 	syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
 	syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
 	buildarr(&cp, &nodec, &nodes);
@@ -916,18 +919,17 @@ syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
 syslog(LOG_NOTICE, "ready to go");
 	if (fork() == 0) {
 		int fd;
-		int pid = getpid();
 		int i;
 		/* fix up IO */
 		/* weirdly it seems bproc forwarding current sends all the same port. But let's plan for the future. 
 		 * new socket for each port (soon)
 		 */
-		for(i = 0; i < 3; i++) {
+		for(i = 0; i < portc; i++) {
 			addr.sin_addr = c->raddr.sin_addr;
 			addr.sin_family = AF_INET;
 			addr.sin_port = htons(strtoul(ports[i], 0, 10));
 			fd = setup_iofw(&addr);
-			write(fd, &pid, sizeof(pid));
+			write(fd, &node, sizeof(node));
 			write(fd, &i, sizeof(i));
 			dup2(fd, i);
 		}

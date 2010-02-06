@@ -555,60 +555,57 @@ void stop_accepter(void)
 static
 void forward_io_new_fd(int fd)
 {
-	int i, pid, rfd;
-	if (read(fd, &pid, sizeof(pid)) != sizeof(pid) ||
-	    read(fd, &rfd, sizeof(rfd)) != sizeof(rfd)) {
-		fprintf(stderr, "bpsh: failed to read pid or fd"
+	int rfd, node;
+	if (read(fd, &node, sizeof(node)) != sizeof(node) || 
+		read(fd, &rfd, sizeof(rfd)) != sizeof(rfd)) {
+		fprintf(stderr, "bpsh: failed to read node id or rfd"
 			" from IO connection.\n");
 		close(fd);
 	} else {
-		for (i = 0; i < num_nodes; i++) {
-			{
-				if (nodes[i].cnum == 0) {
-					fprintf(stderr,
-						"too many connections from"
-						" pid %d (rfd=%d)\n", pid, rfd);
-					close(fd);
-					break;
-				}
-				nodes[i].cnum--;
-				switch (rfd) {
-				case STDIN_FILENO:
-					set_non_block(fd);
-					if (do_input_buffer_add(&inbuf, i, fd)
-					    == 0)
-						io_to_do++;
-					else
-						close(fd);
-					if (nodes[i].alive)
-						outstanding_connections--;
-					break;
-				case STDOUT_FILENO:
-					nodes[i].io[0].infd = fd;
-					io_to_do++;
-					if (nodes[i].alive)
-						outstanding_connections--;
-					break;
-				case STDERR_FILENO:
-					nodes[i].io[1].infd = fd;
-					io_to_do++;
-					if (nodes[i].alive)
-						outstanding_connections--;
-					break;
-				default:
-					fprintf(stderr,
-						"bpsh: %d: bad remote fd"
-						" number: %d\n", pid, rfd);
-					close(fd);
-				}
-				break;
-			}
-		}
-		if (i == num_nodes) {
-			/* Quietly ignore this error case - it can easily happen
-			 * if part of the IO setup on the slave fails and causes
-			 * the whole migration to fail. */
+
+		if (node >= num_nodes) {
+			fprintf(stderr,
+				"Node ID is too large %d", node);
 			close(fd);
+			return;
+		}
+			
+		if (nodes[node].cnum == 0) {
+			fprintf(stderr,
+				"too many connections from"
+				" node %d (rfd=%d)\n", node, rfd);
+			close(fd);
+			return;
+		}
+		nodes[node].cnum--;
+		switch (rfd) {
+			case STDIN_FILENO:
+				set_non_block(fd);
+				if (do_input_buffer_add(&inbuf, node, fd)
+				    == 0)
+					io_to_do++;
+				else
+					close(fd);
+				if (nodes[node].alive)
+					outstanding_connections--;
+				break;
+			case STDOUT_FILENO:
+				nodes[node].io[0].infd = fd;
+				io_to_do++;
+				if (nodes[node].alive)
+					outstanding_connections--;
+				break;
+			case STDERR_FILENO:
+				nodes[node].io[1].infd = fd;
+				io_to_do++;
+				if (nodes[node].alive)
+					outstanding_connections--;
+				break;
+			default:
+				fprintf(stderr,
+					"bpsh: %d: bad remote fd"
+					" number: %d\n", node, rfd);
+				close(fd);
 		}
 	}
 }
@@ -911,6 +908,10 @@ fprintf(stderr, "CMD %s\n", cmd);
 	 */
 	packstart = cp; 
 	cp += 8;
+	/* the "index". We do this so we don't have to keep rewriting the "port space" on the master. 
+	 * in future we might use it to provide custom argv
+	*/
+	cp += snprintf(cp, 8, "%08d", 0);
 	/* Nodes go first because the master may have to rewrite them. */
 	cp += snprintf(cp, edata-cp, "%d", num_nodes);
 	*cp++ = 0;
