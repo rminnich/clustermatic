@@ -59,7 +59,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <sys/bproc.h>
+#include "bproc.h"
 
 #define	_PATH_CP	"/bin/cp"
 #define	OPTIONS "dfprt"

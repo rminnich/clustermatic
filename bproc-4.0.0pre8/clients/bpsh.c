@@ -881,6 +881,9 @@ fprintf(stderr, "CMD %s\n", cmd);
 	iostream = popen(cmd, "r");
 
 	/* format: Command (1), length(6), null(1), lines of: 
+	 * offset to argc as text
+	 * node count as text, null, 
+	 * list of nodes (set of null-terminated strings with extra null at end)
 	 * argc text(line)
 	 * argv, (set of null-terminated strings with extra null at end)
 	 * envc text (line)
@@ -890,8 +893,6 @@ fprintf(stderr, "CMD %s\n", cmd);
 	 * stdin port as text, null, 
 	 * stdout port as text, null, 
 	 * stderr port as text, null
-	 * node count as text, null, 
-	 * list of nodes (set of null-terminated strings with extra null at end)
 	 * cpio archive
 	 */
 
@@ -908,15 +909,20 @@ fprintf(stderr, "CMD %s\n", cmd);
 	 */
 	packstart = cp; 
 	cp += 8;
-	/* the "index". We do this so we don't have to keep rewriting the "port space" on the master. 
-	 * in future we might use it to provide custom argv
+	/* the "NODE id" reserved space. 
+	 * Nodes use this to identify themselves to bpsh when they connect for IO
 	*/
 	cp += snprintf(cp, 8, "%08d", 0);
 	/* Nodes go first because the master may have to rewrite them. */
 	cp += snprintf(cp, edata-cp, "%d", num_nodes);
 	*cp++ = 0;
+	/* use an 07d format to ensure that the master can relay 
+	 * IP addresses (4 octets) for slaves on forwarding. This makes the 
+	 * packet large enough for all cases. And 10M nodes is quite 
+	 * enough for now. 
+	 */
 	for (i = 0; i < num_nodes; i++){
-		cp += snprintf(cp, edata-cp, "%d", nodes[i].node);
+		cp += snprintf(cp, edata-cp, "%07d", nodes[i].node);
 		*cp++ = 0;
 	}
 

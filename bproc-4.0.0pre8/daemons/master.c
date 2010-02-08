@@ -68,6 +68,10 @@
 #define LISTEN_BACKLOG           64
 #define EXTRA_FDS                64
 
+#define EV(type, fd) 	((type)  | ((fd) <<3))
+#define EVFD(ev) ((ev)>>3)
+#define EVTYPE(ev) ((ev)&7)
+
 struct request_t {
 	struct list_head list;
 };
@@ -124,6 +128,7 @@ enum fd_type {
 	CLIENT,
 	SLAVE_CONNECT,
 	SLAVE,
+	BPFS,
 };
 	
 #define IBUFFER_SIZE (sizeof(struct bproc_message_hdr_t) + 64)
@@ -531,7 +536,7 @@ int setup_listen_socket(struct interface_t *ifc)
 	ifc->fd = fd;
 
 	ev.events = EPOLLIN;
-	ev.data.u32 = SLAVE_CONNECT | (ifc->fd<<2);
+	ev.data.u32 = EV(SLAVE_CONNECT, fd);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ifc->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
 		       strerror(errno));
@@ -1789,7 +1794,7 @@ void slave_new_connection(struct node_t *s, struct interface_t *ifc,
 
 	/* Add this FD to our world */
 	ev.events = 0;
-	ev.data.u32 = SLAVE | (conn->fd << 2);
+	ev.data.u32 = EV(SLAVE, conn->fd);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", conn->fd, &ev,
 		       strerror(errno));
@@ -2237,7 +2242,7 @@ int accept_new_client(void)
 
 	/* Add this FD to our world */
 	ev.events = 0;
-	ev.data.u32 = CLIENT | (conn->fd << 2);
+	ev.data.u32 = EV(CLIENT, conn->fd);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", conn->fd, &ev,
 		       strerror(errno));
@@ -2363,7 +2368,7 @@ void conn_update_epoll(struct conn_t *c)
 		ev.events |= EPOLLIN;
 	if (!conn_out_empty(c))
 		ev.events |= EPOLLOUT;
-	ev.data.u32 = c->type | (c->fd <<2);
+	ev.data.u32 = EV(c->type, c->fd);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, c->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD, %d, {0x%x, %p} ): %s",
 		       c->fd, ev.events, ev.data.ptr, strerror(errno));
@@ -2812,7 +2817,7 @@ int setup_master_fd(void)
 	set_non_block(clientconnect);
 
 	ev.events = EPOLLIN;
-	ev.data.u32 = CLIENT_CONNECT | (clientconnect << 2);
+	ev.data.u32 = EV(CLIENT_CONNECT, clientconnect);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, clientconnect, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD): %s",
 		       strerror(errno));
@@ -3038,8 +3043,8 @@ int main(int argc, char *argv[])
 			 */
 			for (i = 0; i < r; i++) {
 				struct conn_t *conn;
-				int what = epoll_events[i].data.u32&3;
-				int whatfd = epoll_events[i].data.u32>>2;
+				int what = EVTYPE(epoll_events[i].data.u32);
+				int whatfd = EVFD(epoll_events[i].data.u32);
 				if (epoll_events[i].events & EPOLLOUT) {
 					switch (what) {
 					case CLIENT:
