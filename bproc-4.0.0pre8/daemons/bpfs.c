@@ -134,6 +134,23 @@ static int xmp_fsync(const char *path, int isdatasync)
     (void) isdatasync;
     return 0;
 }
+/*
+ * Statfs.  Send back information about file system.
+ * Not really worth implementing, except that if we
+ * reply with ENOSYS, programs like df print messages like
+ *   df: `/tmp/z': Function not implemented
+ * and that gets annoying.  Returning all zeros excludes
+ * us from df without appearing to cause any problems.
+ */
+void
+fusestatfs(FuseMsg *m)
+{
+	struct fuse_statfs_out out;
+	
+	memset(&out, 0, sizeof out);
+	replyfuse(m, &out, sizeof out);
+}
+
 
 void (*fusehandlers[100])(FuseMsg*);
 
@@ -141,6 +158,7 @@ struct {
 	int op;
 	void (*fn)(FuseMsg*);
 } fuselist[] = {
+	{ FUSE_STATFS,		fusestatfs },
 #if 0
 	{ FUSE_LOOKUP,		fuselookup },
 	{ FUSE_FORGET,		fuseforget },
@@ -160,7 +178,6 @@ struct {
 	{ FUSE_OPEN,		fuseopen },
 	{ FUSE_READ,		fuseread },
 	{ FUSE_WRITE,		fusewrite },
-	{ FUSE_STATFS,		fusestatfs },
 	{ FUSE_RELEASE,		fuserelease },
 	{ FUSE_FSYNC,		fusefsync },
 	/*

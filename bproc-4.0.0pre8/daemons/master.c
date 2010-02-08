@@ -54,6 +54,7 @@
 #include <sched.h>
 
 #include "bproc.h"
+#include "a.h"
 
 #include "list.h"
 #include "cmconf.h"
@@ -2360,6 +2361,23 @@ int client_msg_in(struct conn_t *c, struct request_t *req)
 }
 
 static
+void fd_update_epoll(int fd, int type, int in, int out)
+{
+	struct epoll_event ev;
+	ev.events = 0;
+	if (in)
+		ev.events |= EPOLLIN;
+	if (out)
+		ev.events |= EPOLLOUT;
+	ev.data.u32 = EV(type, fd);
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev)) {
+		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD, %d, {0x%x, %p} ): %s",
+		       fd, ev.events, ev.data.ptr, strerror(errno));
+		exit(1);
+	}
+
+}
+static
 void conn_update_epoll(struct conn_t *c)
 {
 	struct epoll_event ev;
@@ -2895,9 +2913,11 @@ int main(int argc, char *argv[])
 		{"version", 0, 0, 'V'},
 		{0, 0, 0, 0}
 	};
+	char *fusemntpoint = NULL;
+	int fusefd = -1;
 
 	while ((c =
-		getopt_long(argc, argv, "hVc:m:dvi", long_options, 0)) != EOF) {
+		getopt_long(argc, argv, "f:hVc:m:dvi", long_options, 0)) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(argv[0]);
@@ -2912,6 +2932,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			machine_config_file = optarg;
+			break;
+		case 'f':
+			fusemntpoint = optarg;
 			break;
 		case 'm':
 
@@ -2975,6 +2998,12 @@ int main(int argc, char *argv[])
 	signal(SIGUSR1, (void (*)(int))sigusr1_handler);	/* debug */
 	signal(SIGUSR2, (void (*)(int))sigusr2_handler);	/* debug */
 
+	if (fusemntpoint) {
+		fusefd = mountfuse(fusemntpoint);
+		if (fusefd > -1) {
+			fd_update_epoll(fusefd, BPFS, 1, 0);
+		}
+	}
 	if (want_daemonize)
 		daemonize();
 
@@ -3065,6 +3094,14 @@ int main(int argc, char *argv[])
 				}
 				if (epoll_events[i].events & EPOLLIN) {
 					switch (what) {
+					/* BPFS is not done in the async mode (yet) because the 
+					 * transport of requests is essentially instantaneous.
+					 * we reserve the right to change this decsion. 
+					 */
+					case BPFS: {
+						FuseMsg *m = readfusemsg();
+						break;
+						}
 					case CLIENT_CONNECT:
 						accept_new_client();
 						break;
