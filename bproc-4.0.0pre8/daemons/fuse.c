@@ -278,7 +278,8 @@ void unmountatexit(void)
 		unmountfuse(fusemtpt);
 }
 
-void initfuse(char *mtpt)
+int
+initfuse(char *mtpt)
 {
 	FuseMsg *m;
 	struct fuse_init_in *tx;
@@ -328,6 +329,7 @@ void initfuse(char *mtpt)
 	rx.minor = FUSE_KERNEL_MINOR_VERSION;
 	rx.max_write = fusemaxwrite;
 	replyfuse(m, &rx, sizeof rx);
+	return fusefd;
 }
 
 /*
@@ -830,6 +832,7 @@ int mountfuse(char *mtpt)
 	}
 	close(p[0]);
 	fd = recvfd(p[1]);
+	fprintf(stderr, "Received fd %d\n", fd);
 	close(p[1]);
 	return fd;
 #elif defined(__FreeBSD__) && !defined(__APPLE__)

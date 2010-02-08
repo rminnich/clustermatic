@@ -1845,7 +1845,7 @@ int accept_new_slave(struct interface_t *ifc)
 					       conf.nodes[i].id);
 				slave_new_connection(&conf.nodes[i], ifc,
 						     &remote, slavefd);
-				upate_bpfs();
+				//upate_bpfs();
 				return 0;
 			}
 		}
@@ -2254,6 +2254,58 @@ int accept_new_client(void)
 	return 0;
 }
 
+static
+int setup_fuse_client(void)
+{
+	int clientfd;
+	struct epoll_event ev;
+	ev.events = EPOLLIN;
+	struct sockaddr_in remote;
+	struct conn_t *conn;
+
+	socklen_t remsize = sizeof(remote);
+	clientfd = accept(clientconnect, (struct sockaddr *)&remote, &remsize);
+	if (clientfd == -1) {
+		if (errno == EAGAIN)
+			return 0;
+		syslog(LOG_ERR, "accept: %s", strerror(errno));
+		return -1;
+	}
+
+	if (verbose)
+		syslog(LOG_INFO, "connection from %s", ip_to_str(&remote));
+
+	set_non_block(clientfd);
+
+	conn = &connections[clientfd];
+	conn->fd = clientfd;
+	conn->type = CLIENT;
+	conn->state = CONN_RUNNING;
+	conn->ctime = time(0);
+	conn->raddr = remote.sin_addr;
+
+	/* I/O buffering */
+	INIT_LIST_HEAD(&conn->backlog);
+	INIT_LIST_HEAD(&conn->reqs);
+	conn->ioffset = 0;
+	conn->ireq = 0;
+	conn->ooffset = 0;
+	conn->oreq = 0;
+
+	/* Add this FD to our world */
+	ev.events = 0;
+	ev.data.u32 = EV(CLIENT, conn->fd);
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
+		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", conn->fd, &ev,
+		       strerror(errno));
+		exit(1);
+	}
+
+	conn_update_epoll(conn);
+	return 0;
+}
+
+
 /* be sensitivre to possible bad messages from clients. */
 int
 run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
@@ -2370,8 +2422,8 @@ void fd_update_epoll(int fd, int type, int in, int out)
 	if (out)
 		ev.events |= EPOLLOUT;
 	ev.data.u32 = EV(type, fd);
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev)) {
-		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_MOD, %d, {0x%x, %p} ): %s",
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev)) {
+		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, {0x%x, %p} ): %s",
 		       fd, ev.events, ev.data.ptr, strerror(errno));
 		exit(1);
 	}
@@ -2999,7 +3051,7 @@ int main(int argc, char *argv[])
 	signal(SIGUSR2, (void (*)(int))sigusr2_handler);	/* debug */
 
 	if (fusemntpoint) {
-		fusefd = mountfuse(fusemntpoint);
+		fusefd = initfuse(fusemntpoint);
 		if (fusefd > -1) {
 			fd_update_epoll(fusefd, BPFS, 1, 0);
 		}

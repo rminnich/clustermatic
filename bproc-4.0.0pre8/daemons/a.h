@@ -48,7 +48,7 @@ int
 fusedumpreq(FILE *f, struct fuse_in_header *hdr, void *a);
 int
 fusedumpresp(FILE *f, struct fuse_in_header *reqhdr, struct fuse_out_header *ohdr, void *a);
-void		initfuse(char *mtpt);
+int		initfuse(char *mtpt);
 void	waitfuse(void);
 FuseMsg*	readfusemsg(void);
 void		replyfuse(FuseMsg *m, void *arg, int narg);

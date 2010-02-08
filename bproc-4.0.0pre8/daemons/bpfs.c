@@ -134,6 +134,15 @@ static int xmp_fsync(const char *path, int isdatasync)
     (void) isdatasync;
     return 0;
 }
+
+void
+f2timeout(double f, __u64 *s, __u32 *ns)
+{
+	*s = f;
+	*ns = (f - (int)f)*1e9;
+}
+
+
 /*
  * Statfs.  Send back information about file system.
  * Not really worth implementing, except that if we
@@ -151,6 +160,71 @@ fusestatfs(FuseMsg *m)
 	replyfuse(m, &out, sizeof out);
 }
 
+void
+fuseopendir(FuseMsg *m)
+{
+	struct fuse_open_in *in;
+	struct fuse_open_out out;
+	int openmode, flags, err;
+
+	in = m->tx;
+	flags = in->flags;
+	openmode = flags&3;
+	if(flags){
+		fprintf(stderr, "unexpected open flags 0%uo", (unsigned int)in->flags);
+		replyfuseerrno(m, EACCES);
+		return;
+	}
+	replyfuse(m, &out, sizeof out);
+}
+
+/*
+ * Lookup.  Walk to the name given as the argument.
+ * The response is a fuse_entry_out giving full stat info.
+ */
+void
+fuselookup(FuseMsg *m)
+{
+	char *name;
+	struct fuse_entry_out out;
+	struct fuse_attr *attr;
+
+	name = m->tx;
+	if(strchr(name, '/')){
+		replyfuseerrno(m, ENOENT);
+		return;
+	}
+	/* bpfs directory is 1. 
+	 * bpfs status file is 2. 
+	 * bproc nodes have id with bit 30 set.
+	 */
+	if (strcmp(name, ".") == 0) {
+		out.nodeid = 1;
+		out.generation = 1;
+		attr = &out.attr;
+		attr->ino = 1;
+		attr->size = 1;
+		attr->blocks = (1)/8192;
+		attr->atime = 0;
+		attr->mtime = 0;
+		attr->ctime = 0;
+		attr->atimensec = 0;
+		attr->mtimensec = 0;
+		attr->ctimensec = 0;
+		attr->mode = S_IFDIR|0755;
+		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
+		attr->uid = 0;
+		attr->gid = 0;
+		attr->rdev = 0;
+	} else {
+		replyfuseerrstr(m);
+		return;
+	}
+
+	f2timeout(1.0, &out.attr_valid, &out.attr_valid_nsec);
+	f2timeout(1.0, &out.entry_valid, &out.entry_valid_nsec);
+	replyfuse(m, &out, sizeof out);
+}
 
 void (*fusehandlers[100])(FuseMsg*);
 
@@ -159,8 +233,9 @@ struct {
 	void (*fn)(FuseMsg*);
 } fuselist[] = {
 	{ FUSE_STATFS,		fusestatfs },
-#if 0
+	{ FUSE_OPENDIR,		fuseopendir },
 	{ FUSE_LOOKUP,		fuselookup },
+#if 0
 	{ FUSE_FORGET,		fuseforget },
 	{ FUSE_GETATTR,		fusegetattr },
 	{ FUSE_SETATTR,		fusesetattr },
@@ -190,7 +265,6 @@ struct {
 	/*
 	 * FUSE_INIT is handled in initfuse and should not be seen again.
 	 */
-	{ FUSE_OPENDIR,		fuseopendir },
 	{ FUSE_READDIR,		fusereaddir },
 	{ FUSE_RELEASEDIR,	fusereleasedir },
 	{ FUSE_FSYNCDIR,	fusefsyncdir },
