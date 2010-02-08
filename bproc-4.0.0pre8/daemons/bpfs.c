@@ -10,7 +10,7 @@
 /* For pread()/pwrite() */
 #define _XOPEN_SOURCE 500
 #endif
-
+#define nelem(x) (sizeof(x)/sizeof(x[0]))
 #include "a.h"
 
 static int xmp_getattr(const char *path, struct stat *stbuf)
@@ -98,7 +98,7 @@ static int xmp_read(const char *path, char *buf, size_t size, off_t offset)
 }
 
 #if 0
-friggin ' example code fails. great. 
+friggin example code fails. great. 
 static int xmp_statfs(struct fuse_statfs *fst)
 {
     struct statfs st;
@@ -197,10 +197,11 @@ fusedispatch(void *v)
 				if(fuselist[i].op >= nelem(fusehandlers))
 			sysfatal("make fusehandlers bigger op=%d", fuselist[i].op);
 			fusehandlers[fuselist[i].op] = fuselist[i].fn;
+		}
 	}
 
 	m = v;
-	if((uint)m->hdr->opcode >= nelem(fusehandlers) 
+	if((unsigned int)m->hdr->opcode >= nelem(fusehandlers) 
 	|| !fusehandlers[m->hdr->opcode]){
 		replyfuseerrno(m, ENOSYS);
 		return;
