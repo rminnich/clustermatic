@@ -279,21 +279,22 @@ fusedispatch(void *v)
 	int i;
 	FuseMsg *m;
 	static int first = 1;
-
+	m = v;
+fprintf(stderr, "fusedispatch: op %d\n", m->hdr->opcode);
 	if (first) {
 		first = 0;
 		atexit(unmountatexit);	
 
 		for(i=0; i<nelem(fuselist); i++){
-				if(fuselist[i].op >= nelem(fusehandlers))
-			sysfatal("make fusehandlers bigger op=%d", fuselist[i].op);
+			if(fuselist[i].op >= nelem(fusehandlers))
+				sysfatal("make fusehandlers bigger op=%d", fuselist[i].op);
 			fusehandlers[fuselist[i].op] = fuselist[i].fn;
 		}
 	}
 
-	m = v;
 	if((unsigned int)m->hdr->opcode >= nelem(fusehandlers) 
-	|| !fusehandlers[m->hdr->opcode]){
+		|| !fusehandlers[m->hdr->opcode]){
+		fprintf(stderr, "UNIMPLEMENTED %d\n", m->hdr->opcode);
 		replyfuseerrno(m, ENOSYS);
 		return;
 	}
