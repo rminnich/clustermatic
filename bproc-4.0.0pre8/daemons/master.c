@@ -2255,35 +2255,34 @@ int accept_new_client(void)
 }
 
 static
-int setup_fuse_client(void)
+int setup_fuse_client(char *fusemntpoint)
 {
 	int clientfd;
 	struct epoll_event ev;
 	ev.events = EPOLLIN;
 	struct sockaddr_in remote;
 	struct conn_t *conn;
+	int fusefd = -1;
 
-	socklen_t remsize = sizeof(remote);
-	clientfd = accept(clientconnect, (struct sockaddr *)&remote, &remsize);
-	if (clientfd == -1) {
-		if (errno == EAGAIN)
-			return 0;
-		syslog(LOG_ERR, "accept: %s", strerror(errno));
-		return -1;
-	}
+	if (! fusemntpoint)
+		return fusefd;
+
+	fusefd = initfuse(fusemntpoint);
+
+	if (fusefd < 0)
+		return fusefd;
 
 	if (verbose)
-		syslog(LOG_INFO, "connection from %s", ip_to_str(&remote));
+		syslog(LOG_INFO, "fusefd from %d", fusefd);
 
-	set_non_block(clientfd);
-
-	conn = &connections[clientfd];
-	conn->fd = clientfd;
-	conn->type = CLIENT;
+	conn = &connections[fusefd];
+	conn->fd = fusefd;
+	conn->type = BPFS;
 	conn->state = CONN_RUNNING;
 	conn->ctime = time(0);
-	conn->raddr = remote.sin_addr;
 
+	/* no real IO buffering yet, we may never need it */
+#if 0
 	/* I/O buffering */
 	INIT_LIST_HEAD(&conn->backlog);
 	INIT_LIST_HEAD(&conn->reqs);
@@ -2291,10 +2290,10 @@ int setup_fuse_client(void)
 	conn->ireq = 0;
 	conn->ooffset = 0;
 	conn->oreq = 0;
-
+#endif
 	/* Add this FD to our world */
 	ev.events = 0;
-	ev.data.u32 = EV(CLIENT, conn->fd);
+	ev.data.u32 = EV(BPFS, conn->fd);
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
 		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", conn->fd, &ev,
 		       strerror(errno));
@@ -3050,12 +3049,8 @@ int main(int argc, char *argv[])
 	signal(SIGUSR1, (void (*)(int))sigusr1_handler);	/* debug */
 	signal(SIGUSR2, (void (*)(int))sigusr2_handler);	/* debug */
 
-	if (fusemntpoint) {
-		fusefd = initfuse(fusemntpoint);
-		if (fusefd > -1) {
-			fd_update_epoll(fusefd, BPFS, 1, 0);
-		}
-	}
+	fusefd = setup_fuse_client(fusemntpoint);
+
 	if (want_daemonize)
 		daemonize();
 

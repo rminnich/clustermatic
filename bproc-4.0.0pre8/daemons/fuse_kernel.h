@@ -33,8 +33,8 @@
 /* RSC changed these lines */
 #include <inttypes.h>
 #define __u64 unsigned long long
-#define __u32 unsigned long
-#define __s32 long
+#define __u32 unsigned int
+#define __s32 int
 
 /** Version number of this interface */
 #define FUSE_KERNEL_VERSION 7

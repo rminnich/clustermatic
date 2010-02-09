@@ -71,7 +71,7 @@ FuseMsg *readfusemsg(void)
 		m->hdr->len = n;
 
 	if (m->hdr->len != n) {
-		fprintf(stderr, "readfusemsg: got %d wanted %ld",
+		fprintf(stderr, "readfusemsg: got %d wanted %d",
 			(int)n, m->hdr->len);
 		exit(1);
 	}
@@ -318,7 +318,7 @@ initfuse(char *mtpt)
 	    || (tx->major == FUSE_KERNEL_VERSION
 		&& tx->minor < FUSE_KERNEL_MINOR_VERSION)) {
 		fprintf(stderr,
-			"fuse: too kernel version %ld.%ld older than program version %d.%d",
+			"fuse: too kernel version %d.%d older than program version %d.%d",
 			tx->major, tx->minor, FUSE_KERNEL_VERSION,
 			FUSE_KERNEL_MINOR_VERSION);
 		sysfatal("KERNEL VERSION");
@@ -341,12 +341,12 @@ initfuse(char *mtpt)
  */
 int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 {				/* "%G", hdr, arg */
-	fprintf(f, "len %ld unique 0x%llux uid %ld gid %ld pid %ld ",
+	fprintf(f, "len %d unique 0x%llux uid %d gid %d pid %d ",
 		hdr->len, hdr->unique, hdr->uid, hdr->gid, hdr->pid);
 
 	switch (hdr->opcode) {
 	default:{
-			fprintf(f, "??? opcode %ld", hdr->opcode);
+			fprintf(f, "??? opcode %d", hdr->opcode);
 			break;
 		}
 	case FUSE_LOOKUP:{
@@ -379,11 +379,11 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 				fprintf(f, " mtime %.20g",
 					tx->mtime + tx->mtimensec * 1e-9);
 			if (tx->valid & FATTR_MODE)
-				fprintf(f, " mode 0%luo", tx->mode);
+				fprintf(f, " mode 0%uo", tx->mode);
 			if (tx->valid & FATTR_UID)
-				fprintf(f, " uid %ld", tx->uid);
+				fprintf(f, " uid %d", tx->uid);
 			if (tx->valid & FATTR_GID)
-				fprintf(f, " gid %ld", tx->gid);
+				fprintf(f, " gid %d", tx->gid);
 			break;
 		}
 	case FUSE_READLINK:{
@@ -402,13 +402,13 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 	case FUSE_MKNOD:{
 			struct fuse_mknod_in *tx = a;
 			fprintf(f,
-				"Mknod nodeid 0x%llux mode 0%luo rdev 0x%lux name %p",
+				"Mknod nodeid 0x%llux mode 0%uo rdev 0x%ux name %p",
 				hdr->nodeid, tx->mode, tx->rdev, tx + 1);
 			break;
 		}
 	case FUSE_MKDIR:{
 			struct fuse_mkdir_in *tx = a;
-			fprintf(f, "Mkdir nodeid 0x%llux mode 0%luo name %p",
+			fprintf(f, "Mkdir nodeid 0x%llux mode 0%uo name %p",
 				hdr->nodeid, tx->mode, tx + 1);
 			break;
 		}
@@ -442,21 +442,21 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 			struct fuse_open_in *tx = a;
 			/* Should one or both of flags and mode be octal? */
 			fprintf(f,
-				"Open nodeid 0x%llux flags 0x%lux mode 0x%lux",
+				"Open nodeid 0x%llux flags 0x%ux mode 0x%ux",
 				hdr->nodeid, tx->flags, tx->mode);
 			break;
 		}
 	case FUSE_READ:{
 			struct fuse_read_in *tx = a;
 			fprintf(f,
-				"Read nodeid 0x%llux fh 0x%llux offset %lld size %lud",
+				"Read nodeid 0x%llux fh 0x%llux offset %lld size %ud",
 				hdr->nodeid, tx->fh, tx->offset, tx->size);
 			break;
 		}
 	case FUSE_WRITE:{
 			struct fuse_write_in *tx = a;
 			fprintf(f,
-				"Write nodeid 0x%llux fh 0x%llux offset %lld size %lud flags 0x%lux",
+				"Write nodeid 0x%llux fh 0x%llux offset %lld size %ud flags 0x%ux",
 				hdr->nodeid, tx->fh, tx->offset, tx->size,
 				tx->write_flags);
 			break;
@@ -468,14 +468,14 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 	case FUSE_RELEASE:{
 			struct fuse_release_in *tx = a;
 			fprintf(f,
-				"Release nodeid 0x%llux fh 0x%llux flags 0x%lux",
+				"Release nodeid 0x%llux fh 0x%llux flags 0x%ux",
 				hdr->nodeid, tx->fh, tx->flags);
 			break;
 		}
 	case FUSE_FSYNC:{
 			struct fuse_fsync_in *tx = a;
 			fprintf(f,
-				"Fsync nodeid 0x%llux fh 0x%llux flags 0x%lux",
+				"Fsync nodeid 0x%llux fh 0x%llux flags 0x%ux",
 				hdr->nodeid, tx->fh, tx->fsync_flags);
 			break;
 		}
@@ -484,19 +484,19 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 			char *name = (char *)(tx + 1);
 			char *value = name + strlen(name) + 1;
 			fprintf(f,
-				"Setxattr nodeid 0x%llux size %ld flags 0x%lux name %p value %p",
+				"Setxattr nodeid 0x%llux size %d flags 0x%ux name %p value %p",
 				hdr->nodeid, tx->size, tx->flags, name, value);
 			break;
 		}
 	case FUSE_GETXATTR:{
 			struct fuse_getxattr_in *tx = a;
-			fprintf(f, "Getxattr nodeid 0x%llux size %ld name %p",
+			fprintf(f, "Getxattr nodeid 0x%llux size %d name %p",
 				hdr->nodeid, tx->size, tx + 1);
 			break;
 		}
 	case FUSE_LISTXATTR:{
 			struct fuse_getxattr_in *tx = a;
-			fprintf(f, "Listxattr nodeid 0x%llux size %ld",
+			fprintf(f, "Listxattr nodeid 0x%llux size %d",
 				hdr->nodeid, tx->size);
 			break;
 		}
@@ -508,54 +508,54 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 	case FUSE_FLUSH:{
 			struct fuse_flush_in *tx = a;
 			fprintf(f,
-				"Flush nodeid 0x%llux fh 0x%llux flags 0x%lux",
+				"Flush nodeid 0x%llux fh 0x%llux flags 0x%ux",
 				hdr->nodeid, tx->fh, tx->flush_flags);
 			break;
 		}
 	case FUSE_INIT:{
 			struct fuse_init_in *tx = a;
-			fprintf(f, "Init major %ld minor %ld",
+			fprintf(f, "Init major %d minor %d",
 				tx->major, tx->minor);
 			break;
 		}
 	case FUSE_OPENDIR:{
 			struct fuse_open_in *tx = a;
 			fprintf(f,
-				"Opendir nodeid 0x%llux flags 0x%lux mode 0x%lux",
+				"Opendir nodeid 0x%llux flags 0x%ux mode 0x%ux",
 				hdr->nodeid, tx->flags, tx->mode);
 			break;
 		}
 	case FUSE_READDIR:{
 			struct fuse_read_in *tx = a;
 			fprintf(f,
-				"Readdir nodeid 0x%llux fh 0x%llux offset %lld size %lud",
+				"Readdir nodeid 0x%llux fh 0x%llux offset %lld size %ud",
 				hdr->nodeid, tx->fh, tx->offset, tx->size);
 			break;
 		}
 	case FUSE_RELEASEDIR:{
 			struct fuse_release_in *tx = a;
 			fprintf(f,
-				"Releasedir nodeid 0x%llux fh 0x%llux flags 0x%lux",
+				"Releasedir nodeid 0x%llux fh 0x%llux flags 0x%ux",
 				hdr->nodeid, tx->fh, tx->flags);
 			break;
 		}
 	case FUSE_FSYNCDIR:{
 			struct fuse_fsync_in *tx = a;
 			fprintf(f,
-				"Fsyncdir nodeid 0x%llux fh 0x%llux flags 0x%lux",
+				"Fsyncdir nodeid 0x%llux fh 0x%llux flags 0x%ux",
 				hdr->nodeid, tx->fh, tx->fsync_flags);
 			break;
 		}
 	case FUSE_ACCESS:{
 			struct fuse_access_in *tx = a;
-			fprintf(f, "Access nodeid 0x%llux mask 0x%lux",
+			fprintf(f, "Access nodeid 0x%llux mask 0x%ux",
 				hdr->nodeid, tx->mask);
 			break;
 		}
 	case FUSE_CREATE:{
 			struct fuse_open_in *tx = a;
 			fprintf(f,
-				"Create nodeid 0x%llx flags 0x%lux mode 0x%lux name %p",
+				"Create nodeid 0x%llx flags 0x%ux mode 0x%ux name %p",
 				hdr->nodeid, tx->flags, tx->mode, tx + 1);
 			break;
 		}
@@ -570,11 +570,11 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 	int len = ohdr->len - sizeof *ohdr;
 	fprintf(f, "unique 0x%llux ", ohdr->unique);
 	if (ohdr->error) {
-		fprintf(f, "error %ld %s", ohdr->error, strerror(-ohdr->error));
+		fprintf(f, "error %d %s", ohdr->error, strerror(-ohdr->error));
 	} else
 		switch (hdr->opcode) {
 		default:{
-				fprintf(f, "??? opcode %ld", hdr->opcode);
+				fprintf(f, "??? opcode %d", hdr->opcode);
 				break;
 			}
 		case FUSE_LOOKUP:{
@@ -599,7 +599,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 					rx->attr_valid +
 					rx->attr_valid_nsec * 1e-9);
 				fprintf(f,
-					" ino 0x%llux size %lld blocks %lld atime %.20g mtime %.20g ctime %.20g mode 0%luo nlink %ld uid %ld gid %ld rdev 0x%lux",
+					" ino 0x%llux size %lld blocks %lld atime %.20g mtime %.20g ctime %.20g mode 0%uo nlink %d uid %d gid %d rdev 0x%ux",
 					rx->attr.ino, rx->attr.size,
 					rx->attr.blocks,
 					rx->attr.atime +
@@ -627,7 +627,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 					rx->attr_valid +
 					rx->attr_valid_nsec * 1e-9);
 				fprintf(f,
-					" ino 0x%llux size %lld blocks %lld atime %.20g mtime %.20g ctime %.20g mode 0%luo nlink %ld uid %ld gid %ld rdev 0x%lux",
+					" ino 0x%llux size %lld blocks %lld atime %.20g mtime %.20g ctime %.20g mode 0%uo nlink %d uid %d gid %d rdev 0x%ux",
 					rx->attr.ino, rx->attr.size,
 					rx->attr.blocks,
 					rx->attr.atime +
@@ -688,7 +688,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 				fprintf(f, "(Open) ");
 			      fmt_open_out:
 				rx = a;
-				fprintf(f, "fh 0x%llux flags 0x%lux", rx->fh,
+				fprintf(f, "fh 0x%llux flags 0x%ux", rx->fh,
 					rx->open_flags);
 				break;
 			}
@@ -698,7 +698,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 			}
 		case FUSE_WRITE:{
 				struct fuse_write_out *rx = a;
-				fprintf(f, "(Write) size %ld", rx->size);
+				fprintf(f, "(Write) size %d", rx->size);
 				break;
 			}
 		case FUSE_STATFS:{
@@ -707,7 +707,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 				 */
 				struct fuse_statfs_out *rx = a;
 				fprintf(f,
-					"(Statfs) blocks %lld bfree %lld bavail %lld files %lld ffree %lld bsize %lud namelen %lud frsize %lud",
+					"(Statfs) blocks %lld bfree %lld bavail %lld files %lld ffree %lld bsize %ud namelen %ud frsize %ud",
 					rx->st.blocks, rx->st.bfree,
 					rx->st.bavail, rx->st.files,
 					rx->st.ffree, rx->st.bsize,
@@ -745,7 +745,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 		case FUSE_INIT:{
 				struct fuse_init_out *rx = a;
 				fprintf(f,
-					"(Init) major %ld minor %ld max_write %ld",
+					"(Init) major %d minor %d max_write %d",
 					rx->major, rx->minor, rx->max_write);
 				break;
 			}
@@ -781,7 +781,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 					rx->e.attr_valid +
 					rx->e.attr_valid_nsec * 1e-9);
 				fprintf(f,
-					" ino 0x%llux size %lld blocks %lld atime %.20g mtime %.20g ctime %.20g mode 0%luo nlink %ld uid %ld gid %ld rdev 0x%lux",
+					" ino 0x%llux size %lld blocks %lld atime %.20g mtime %.20g ctime %.20g mode 0%uo nlink %d uid %d gid %d rdev 0x%ux",
 					rx->e.attr.ino, rx->e.attr.size,
 					rx->e.attr.blocks,
 					rx->e.attr.atime +
@@ -793,7 +793,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 					rx->e.attr.mode, rx->e.attr.nlink,
 					rx->e.attr.uid, rx->e.attr.gid,
 					rx->e.attr.rdev);
-				fprintf(f, " fh 0x%lluxflags 0x%lux", rx->o.fh,
+				fprintf(f, " fh 0x%lluxflags 0x%ux", rx->o.fh,
 					rx->o.open_flags);
 				break;
 			}
