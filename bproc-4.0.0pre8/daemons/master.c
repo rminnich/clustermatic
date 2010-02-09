@@ -2432,6 +2432,7 @@ static
 void conn_update_epoll(struct conn_t *c)
 {
 	struct epoll_event ev;
+	memset(&ev, 0, sizeof(ev));
 	ev.events = 0;
 	if (c->state != CONN_EOF && c->state != CONN_DEAD)
 		ev.events |= EPOLLIN;
