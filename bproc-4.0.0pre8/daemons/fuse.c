@@ -328,8 +328,6 @@ initfuse(char *mtpt)
 	rx.major = FUSE_KERNEL_VERSION;
 	rx.minor = FUSE_KERNEL_MINOR_VERSION;
 	rx.max_write = fusemaxwrite;
-	rx.max_write = 256 * 256 * 2;
-	rx.max_readahead = rx.max_write;
 	replyfuse(m, &rx, sizeof rx);
 	return fusefd;
 }
