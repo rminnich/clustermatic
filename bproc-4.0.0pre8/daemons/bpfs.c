@@ -165,14 +165,12 @@ fuseopendir(FuseMsg *m)
 {
 	struct fuse_open_in *in;
 	struct fuse_open_out out;
-	int openmode, flags, err;
 
 	in = m->tx;
-	flags = in->flags;
-	openmode = flags&3;
-	if(flags){
-		fprintf(stderr, "unexpected open flags 0%uo", (unsigned int)in->flags);
-		replyfuseerrno(m, EACCES);
+	if (m->hdr->nodeid == 1) {
+		out.fh = 1;
+	} else {
+		replyfuseerrno(m, ENOENT);
 		return;
 	}
 	replyfuse(m, &out, sizeof out);
@@ -257,6 +255,122 @@ printf("fusegetattr\n");
 printf("reply!\n");
 	replyfuse(m, &out, sizeof out);
 }
+/*
+ * Fuse assumes that it can always read two directory entries.
+ * If it gets just one, it will double it in the dirread results.
+ * Thus if a directory contains just "a", you see "a" twice.
+ * Adding . as the first directory entry works around this.
+ */
+
+int
+canpack(char *name, int ino, unsigned long long off, unsigned char **pp, unsigned char *ep)
+{
+	unsigned char *p;
+	struct fuse_dirent *de;
+	int pad, size;
+	
+	p = *pp;
+	size = sizeof(struct fuse_dirent) - 1 + strlen(name);
+	pad = 0;
+	if(size%8)
+		pad = 8 - size%8;
+	if(size+pad > ep - p)
+		return 0;
+	de = (struct fuse_dirent*)p;
+	de->ino = ino;
+	de->off = off;
+	de->namelen = strlen(name);
+	memmove(de->name, name, de->namelen);
+	if(pad > 0)
+		memset(de->name+de->namelen, 0, pad);
+	*pp = p+size+pad;
+	return 1;
+}
+
+
+/* 
+ * Readdir.
+ * Read from file handle in->fh at offset in->offset for size in->size.
+ * We truncate size to maxwrite just to keep the buffer reasonable.
+ * We assume 9P directory read semantics: a read at offset 0 rewinds
+ * and a read at any other offset starts where we left off.
+ * If it became necessary, we could implement a crude seek
+ * or cache the entire list of directory entries.
+ * Directory entries read from 9P but not yet handed to FUSE
+ * are stored in m->d,nd,d0.
+ */
+
+void
+fusereaddir(FuseMsg *m)
+{
+	struct fuse_read_in *in;
+	unsigned char *buf, *p, *ep;
+	int n;
+	
+	in = m->tx;
+	if(in->fh != 1){
+		replyfuseerrno(m, ESTALE);
+		return;
+	}	
+	n = in->size;
+	if(n > fusemaxwrite)
+		n = fusemaxwrite;
+	buf = malloc(n);
+	p = buf;
+	ep = buf + n;
+	if(in->offset == 0){
+		if (! canpack(".", 1, 0, &p, ep)) {
+			replyfuseerrno(m, ESTALE);
+			return;
+		}
+		if (! canpack("..", 1, p-buf, &p, ep)) {
+			replyfuseerrno(m, ESTALE);
+			return;
+		}
+	}
+#if 0
+	for(;;){
+		while(ff->nd > 0){
+			if(!canpack(ff->d, ff->off, &p, ep))
+				goto out;
+			ff->off++;
+			ff->d++;
+			ff->nd--;
+		}
+		free(ff->d0);
+		ff->d0 = nil;
+		ff->d = nil;
+		if((ff->nd = fsdirread(ff->fid, &ff->d0)) < 0){
+			replyfuseerrstr(m);
+			free(buf);
+			return;
+		}
+		if(ff->nd == 0)
+			break;
+		ff->d = ff->d0;
+	}
+#endif
+out:			
+	replyfuse(m, buf, p - buf);
+	free(buf);
+}
+/*
+ * Release.
+ *
+ * in->flags is the open mode used in Open or Opendir.
+ */
+void
+fuserelease(FuseMsg *m)
+{
+	//struct fuse_release_in *in;
+	replyfuse(m, NULL, 0);
+}
+
+void
+fusereleasedir(FuseMsg *m)
+{
+	fuserelease(m);
+}
 
 
 void (*fusehandlers[100])(FuseMsg*);
@@ -269,6 +383,9 @@ struct {
 	{ FUSE_OPENDIR,		fuseopendir },
 	{ FUSE_LOOKUP,		fuselookup },
 	{ FUSE_GETATTR,		fusegetattr },
+	{ FUSE_READDIR,		fusereaddir },
+	{ FUSE_RELEASEDIR,	fusereleasedir },
+	{ FUSE_RELEASE,		fuserelease },
 #if 0
 	{ FUSE_FORGET,		fuseforget },
 	{ FUSE_SETATTR,		fusesetattr },
@@ -286,7 +403,6 @@ struct {
 	{ FUSE_OPEN,		fuseopen },
 	{ FUSE_READ,		fuseread },
 	{ FUSE_WRITE,		fusewrite },
-	{ FUSE_RELEASE,		fuserelease },
 	{ FUSE_FSYNC,		fusefsync },
 	/*
 	 * FUSE_SETXATTR, FUSE_GETXATTR, FUSE_LISTXATTR, and
@@ -298,8 +414,6 @@ struct {
 	/*
 	 * FUSE_INIT is handled in initfuse and should not be seen again.
 	 */
-	{ FUSE_READDIR,		fusereaddir },
-	{ FUSE_RELEASEDIR,	fusereleasedir },
 	{ FUSE_FSYNCDIR,	fusefsyncdir },
 	{ FUSE_ACCESS,		fuseaccess },
 	{ FUSE_CREATE,		fusecreate },
