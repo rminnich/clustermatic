@@ -521,7 +521,7 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 	case FUSE_OPENDIR:{
 			struct fuse_open_in *tx = a;
 			fprintf(f,
-				"Opendir nodeid 0x%llux flags 0x%ux mode 0x%ux",
+				"Opendir nodeid 0x%llux flags 0x%u mode 0x%u",
 				hdr->nodeid, tx->flags, tx->mode);
 			break;
 		}
@@ -560,6 +560,7 @@ int fusedumpreq(FILE * f, struct fuse_in_header *hdr, void *a)
 			break;
 		}
 	}
+	fprintf(f, "\n");
 }
 
 int
@@ -798,6 +799,7 @@ fusedumpresp(FILE * f, struct fuse_in_header *hdr, struct fuse_out_header *ohdr,
 				break;
 			}
 		}
+	fprintf(f, "\n");
 	return 0;
 }
 

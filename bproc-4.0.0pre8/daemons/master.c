@@ -185,6 +185,8 @@ struct node_t {
 	int flag:1;		/* generic reusable flag */
 
 	int ping_in;		/* Data in since last ping interval. */
+	/* permissions -- used to be in kernel */
+	int mode, user, group;
 };
 
 struct assoc_t {
@@ -629,6 +631,44 @@ struct node_t *add_node(int node)
 	INIT_LIST_HEAD(&n->reqs);
 	INIT_LIST_HEAD(&n->clist);
 	return n;
+}
+static struct node_t *
+nodep(int node)
+{
+	struct node_t *n = 0;
+	if (node < tc.num_ids)
+		n = tc.node_map[node];
+	return n;
+}
+int
+bprocnode(int node)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
+		return -1;
+
+	return n->id;
+}
+
+int
+bprocuid(int node, int uid)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
+		return -1;
+
+	return n->user = uid;
+}
+
+int
+bprocgid(int node, int gid)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
+		return -1;
+
+
+	return n->group = gid;
 }
 
 static
@@ -3148,6 +3188,8 @@ int main(int argc, char *argv[])
 					 */
 					case BPFS: {
 						FuseMsg *m = readfusemsg();
+						if (m)
+							fusedispatch(m);
 						break;
 						}
 					case CLIENT_CONNECT:
