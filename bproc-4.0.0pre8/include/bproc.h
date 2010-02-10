@@ -760,6 +760,10 @@ int  bproc_notifier(void);
 /* Utility functions - this one is going away... */
 int bproc_nodespec(struct bproc_node_set_t *ns, const char *str);
 int bprocnode(int node);
+int bprocuid(int node, int uid);
+int bprocgid(int node, int gid);
+
+
 #ifdef __cplusplus
 }
 #endif

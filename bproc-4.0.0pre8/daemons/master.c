@@ -632,17 +632,43 @@ struct node_t *add_node(int node)
 	INIT_LIST_HEAD(&n->clist);
 	return n;
 }
-
-int
-bprocnode(int node)
+static struct node_t *
+nodep(int node)
 {
 	struct node_t *n = 0;
 	if (node < tc.num_ids)
 		n = tc.node_map[node];
-	if (!n)
+	return n;
+}
+int
+bprocnode(int node)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
 		return -1;
 
 	return n->id;
+}
+
+int
+bprocuid(int node, int uid)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
+		return -1;
+
+	return n->user = uid;
+}
+
+int
+bprocgid(int node, int gid)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
+		return -1;
+
+
+	return n->group = gid;
 }
 
 static

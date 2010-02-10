@@ -311,6 +311,59 @@ fuselookup(FuseMsg *m)
 	replyfuse(m, &out, sizeof out);
 }
 /*
+ * Setattr.
+ * FUSE treats the many Unix attribute setting routines
+ * more or less like 9P does, with a single message.
+ */
+void
+fusesetattr(FuseMsg *m)
+{
+	struct fuse_setattr_in *in;
+	struct fuse_attr_out out;
+	int node = m->hdr->nodeid;
+	int ok = FATTR_UID | FATTR_GID;
+
+	/* we can only change node attributes */
+
+	if (! (node & 0x100000)){
+		replyfuseerrno(m, ESTALE);
+		return;
+	}
+
+	node &= ~0x100000;
+	if (bprocnode(node) < 0) {
+		replyfuseerrno(m, ESTALE);
+		return;
+	}
+#if 0
+	if(in->valid&FATTR_SIZE)
+		d.length = in->size;
+	if(in->valid&FATTR_ATIME)
+		d.atime = in->atime;
+	if(in->valid&FATTR_MTIME)
+		d.mtime = in->mtime;
+	if(in->valid&FATTR_MODE)
+		d.mode = in->mode;
+#endif
+
+	if (in->valid & (~ ok)) {
+		replyfuseerrno(m, EPERM);
+		return;
+	}
+
+	if (in->valid&FATTR_UID)
+		bprocuid(node, in->uid);
+
+	if (in->valid&FATTR_GID){
+		bprocgid(node, in->gid);
+	}
+
+stat:
+	memset(&out, 0, sizeof out);
+	fillattr(m->hdr->nodeid, &out.attr);
+	replyfuse(m, &out, sizeof out);
+}
+/*
  * Getattr.
  * Replies with a fuse_attr_out structure giving the
  * attr for the requested nodeid in out.attr.
@@ -470,9 +523,9 @@ struct {
 	{ FUSE_READDIR,		fusereaddir },
 	{ FUSE_RELEASEDIR,	fusereleasedir },
 	{ FUSE_RELEASE,		fuserelease },
+	{ FUSE_SETATTR,		fusesetattr },
 #if 0
 	{ FUSE_FORGET,		fuseforget },
-	{ FUSE_SETATTR,		fusesetattr },
 	/*
 	 * FUSE_SYMLINK, FUSE_MKNOD are unimplemented.
 	 */
