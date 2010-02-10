@@ -178,6 +178,28 @@ fuseopendir(FuseMsg *m)
 	replyfuse(m, &out, sizeof out);
 }
 
+void
+fillattr(__u64  inode, struct fuse_attr *attr)
+{
+	memset(attr, 0, sizeof attr);
+
+	if (inode == 1) {
+		attr->ino = 1;
+		attr->size = 1;
+		attr->blocks = (1)/8192;
+		attr->atime = 0;
+		attr->mtime = 0;
+		attr->ctime = 0;
+		attr->atimensec = 0;
+		attr->mtimensec = 0;
+		attr->ctimensec = 0;
+		attr->mode = S_IFDIR|0755;
+		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
+		attr->uid = 0;
+		attr->gid = 0;
+		attr->rdev = 0;
+	}
+}
 /*
  * Lookup.  Walk to the name given as the argument.
  * The response is a fuse_entry_out giving full stat info.
@@ -202,20 +224,7 @@ fuselookup(FuseMsg *m)
 		out.nodeid = 1;
 		out.generation = 1;
 		attr = &out.attr;
-		attr->ino = 1;
-		attr->size = 1;
-		attr->blocks = (1)/8192;
-		attr->atime = 0;
-		attr->mtime = 0;
-		attr->ctime = 0;
-		attr->atimensec = 0;
-		attr->mtimensec = 0;
-		attr->ctimensec = 0;
-		attr->mode = S_IFDIR|0755;
-		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
-		attr->uid = 0;
-		attr->gid = 0;
-		attr->rdev = 0;
+		fillattr(1, attr);
 	} else {
 		replyfuseerrstr(m);
 		return;
@@ -225,6 +234,30 @@ fuselookup(FuseMsg *m)
 	f2timeout(1.0, &out.entry_valid, &out.entry_valid_nsec);
 	replyfuse(m, &out, sizeof out);
 }
+/*
+ * Getattr.
+ * Replies with a fuse_attr_out structure giving the
+ * attr for the requested nodeid in out.attr.
+ * Out.attr_valid and out.attr_valid_nsec give 
+ * the amount of time that the attributes can
+ * be cached.
+ *
+ * Empirically, though, if I run ls -ld on the root
+ * twice back to back, I still get two getattrs,
+ * even with a one second attribute timeout!
+ */
+void
+fusegetattr(FuseMsg *m)
+{
+	struct fuse_attr_out out;
+printf("fusegetattr\n");
+	out.attr_valid = 5;
+	out.attr_valid_nsec = 0;
+	fillattr(m->hdr->nodeid, &out.attr);
+printf("reply!\n");
+	replyfuse(m, &out, sizeof out);
+}
+
 
 void (*fusehandlers[100])(FuseMsg*);
 
@@ -235,9 +268,9 @@ struct {
 	{ FUSE_STATFS,		fusestatfs },
 	{ FUSE_OPENDIR,		fuseopendir },
 	{ FUSE_LOOKUP,		fuselookup },
+	{ FUSE_GETATTR,		fusegetattr },
 #if 0
 	{ FUSE_FORGET,		fuseforget },
-	{ FUSE_GETATTR,		fusegetattr },
 	{ FUSE_SETATTR,		fusesetattr },
 	/*
 	 * FUSE_SYMLINK, FUSE_MKNOD are unimplemented.

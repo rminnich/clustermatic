@@ -3148,6 +3148,8 @@ int main(int argc, char *argv[])
 					 */
 					case BPFS: {
 						FuseMsg *m = readfusemsg();
+						if (m)
+							fusedispatch(m);
 						break;
 						}
 					case CLIENT_CONNECT:
