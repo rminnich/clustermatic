@@ -757,23 +757,9 @@ const char *bproc_strerror(int err);
 int  bproc_version(struct bproc_version_t *vers);
 int  bproc_notifier(void);
 
-/*--------------------------------------------------------------------
- * VMADump interface exported via BProc *
- *------------------------------------------------------------------*/
-int bproc_dump    (int fd, int flags);
-int bproc_undump  (int fd);
-int bproc_execdump(int fd, int flags, const char *cmd, char * const argv[],
-		   char * const envp[]);
-int bproc_libclear(void);
-int bproc_libadd  (const char *libname);
-int bproc_libdel  (const char *libname);
-int bproc_liblist (char **list_);
-
-
-
 /* Utility functions - this one is going away... */
 int bproc_nodespec(struct bproc_node_set_t *ns, const char *str);
-
+int bprocnode(int node);
 #ifdef __cplusplus
 }
 #endif

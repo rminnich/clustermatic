@@ -191,12 +191,74 @@ fillattr(__u64  inode, struct fuse_attr *attr)
 		attr->atimensec = 0;
 		attr->mtimensec = 0;
 		attr->ctimensec = 0;
-		attr->mode = S_IFDIR|0755;
+		attr->mode = S_IFDIR|0555;
 		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
 		attr->uid = 0;
 		attr->gid = 0;
 		attr->rdev = 0;
 	}
+	if (inode == 2) {
+		attr->ino = 2;
+		attr->size = 1;
+		attr->blocks = (1)/8192;
+		attr->atime = 0;
+		attr->mtime = 0;
+		attr->ctime = 0;
+		attr->atimensec = 0;
+		attr->mtimensec = 0;
+		attr->ctimensec = 0;
+		attr->mode = S_IFDIR|0555;
+		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
+		attr->uid = 0;
+		attr->gid = 0;
+		attr->rdev = 0;
+	}
+	if (inode == 3) {
+		attr->ino = 3;
+		attr->size = 1;
+		attr->blocks = (1)/8192;
+		attr->atime = 0;
+		attr->mtime = 0;
+		attr->ctime = 0;
+		attr->atimensec = 0;
+		attr->mtimensec = 0;
+		attr->ctimensec = 0;
+		attr->mode = S_IFREG|0444;
+		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
+		attr->uid = 0;
+		attr->gid = 0;
+		attr->rdev = 0;
+	}
+	if (inode & 0x100000) {
+		attr->ino = inode;
+		attr->size = 1;
+		attr->blocks = (1)/8192;
+		attr->atime = 0;
+		attr->mtime = 0;
+		attr->ctime = 0;
+		attr->atimensec = 0;
+		attr->mtimensec = 0;
+		attr->ctimensec = 0;
+		attr->mode = S_IFREG|0444;
+		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
+		attr->uid = 0;
+		attr->gid = 0;
+		attr->rdev = 0;
+	}
+}
+
+int
+nodenum(char *name)
+{
+	int i;
+	for(i = 0; i < strlen(name); i++)
+		if (! isdigit(name[i]))
+			return -1;
+
+	i = strtoul(name, 0, 10);
+
+	i = bprocnode(i);
+	return i;
 }
 /*
  * Lookup.  Walk to the name given as the argument.
@@ -208,6 +270,7 @@ fuselookup(FuseMsg *m)
 	char *name;
 	struct fuse_entry_out out;
 	struct fuse_attr *attr;
+	int node;
 
 	name = m->tx;
 	if(strchr(name, '/')){
@@ -223,6 +286,21 @@ fuselookup(FuseMsg *m)
 		out.generation = 1;
 		attr = &out.attr;
 		fillattr(1, attr);
+	} else if (strcmp(name, "..") == 0) {
+		out.nodeid = 1;
+		out.generation = 1;
+		attr = &out.attr;
+		fillattr(2, attr);
+	} else if (strcmp(name, "status") == 0) {
+		out.nodeid = 3;
+		out.generation = 1;
+		attr = &out.attr;
+		fillattr(3, attr);
+	} else if ((node = nodenum(name)) > -1) {
+		out.nodeid = node | 0x100000;
+		out.generation = 1;
+		attr = &out.attr;
+		fillattr(out.nodeid, attr);
 	} else {
 		replyfuseerrstr(m);
 		return;
@@ -262,7 +340,7 @@ printf("reply!\n");
  * Adding . as the first directory entry works around this.
  */
 
-int
+static int
 canpack(char *name, int ino, unsigned long long off, unsigned char **pp, unsigned char *ep)
 {
 	unsigned char *p;
@@ -306,6 +384,10 @@ fusereaddir(FuseMsg *m)
 	struct fuse_read_in *in;
 	unsigned char *buf, *p, *ep;
 	int n;
+	int bprocnode(int node);
+	unsigned long long i;;
+	unsigned long long offset;
+	char bname[256];
 	
 	in = m->tx;
 	if(in->fh != 1){
@@ -315,41 +397,43 @@ fusereaddir(FuseMsg *m)
 	n = in->size;
 	if(n > fusemaxwrite)
 		n = fusemaxwrite;
-	buf = malloc(n);
+	buf = calloc(1, n);
 	p = buf;
 	ep = buf + n;
-	if(in->offset == 0){
-		if (! canpack(".", 1, 0, &p, ep)) {
-			replyfuseerrno(m, ESTALE);
-			return;
-		}
-		if (! canpack("..", 1, p-buf, &p, ep)) {
+	offset = in->offset;
+	if(offset == 0){
+		if (! canpack(".", 1, ++offset, &p, ep)) {
 			replyfuseerrno(m, ESTALE);
 			return;
 		}
 	}
-#if 0
-	for(;;){
-		while(ff->nd > 0){
-			if(!canpack(ff->d, ff->off, &p, ep))
-				goto out;
-			ff->off++;
-			ff->d++;
-			ff->nd--;
-		}
-		free(ff->d0);
-		ff->d0 = nil;
-		ff->d = nil;
-		if((ff->nd = fsdirread(ff->fid, &ff->d0)) < 0){
-			replyfuseerrstr(m);
-			free(buf);
+	if (offset == 1) {
+		if (! canpack("..", 1, ++offset, &p, ep)) {
+			replyfuseerrno(m, ESTALE);
 			return;
 		}
-		if(ff->nd == 0)
+		goto out;
+	}
+	if (offset == 2) {
+		if (!canpack("status", 3, ++offset, &p, ep)) {
+			replyfuseerrno(m, ESTALE);
+			return;
+		}
+		goto out;
+	}
+	if (offset > 2) {
+	/* if we put other nodes in here we need to change the 2 below */
+		while (1) {
+		int node = offset-3;
+		int bpnode;
+		bpnode = bprocnode(node);
+		if (bpnode < 0)
 			break;
-		ff->d = ff->d0;
+		snprintf(bname, sizeof(bname), "%d",bpnode);
+		if (!canpack(bname, (int)0x100000|bpnode, ++offset, &p, ep))
+			break;
 	}
-#endif
+	}
 out:			
 	replyfuse(m, buf, p - buf);
 	free(buf);

@@ -185,6 +185,8 @@ struct node_t {
 	int flag:1;		/* generic reusable flag */
 
 	int ping_in;		/* Data in since last ping interval. */
+	/* permissions -- used to be in kernel */
+	int mode, user, group;
 };
 
 struct assoc_t {
@@ -629,6 +631,18 @@ struct node_t *add_node(int node)
 	INIT_LIST_HEAD(&n->reqs);
 	INIT_LIST_HEAD(&n->clist);
 	return n;
+}
+
+int
+bprocnode(int node)
+{
+	struct node_t *n = 0;
+	if (node < tc.num_ids)
+		n = tc.node_map[node];
+	if (!n)
+		return -1;
+
+	return n->id;
 }
 
 static
