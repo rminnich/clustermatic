@@ -123,7 +123,7 @@ bpsh: bpsh.o  ldd.o $(SOLINK)
 bpcp: bpcp.o $(SOLINK)
 	$(CC) bpcp.o -o bpcp $(LIBS)
 bpstat: bpstat.o $(SOLINK)
-	$(CC) -o $@ bpstat.o $(LIBS)
+	$(CC) -static -o $@ bpstat.o $(LIBS)
 bpctl: bpctl.o $(SOLINK)
 	$(CC) bpctl.o -o bpctl $(LIBS)
 bplib: bplib.o

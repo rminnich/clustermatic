@@ -415,6 +415,7 @@ fuseread(FuseMsg *m)
 	unsigned char *buf, *p, *ep;
 	int n;
 	loff_t offset;
+	int nodenum;
 	
 	statusatime = now();
 	in = m->tx;
@@ -426,15 +427,18 @@ fuseread(FuseMsg *m)
 	if(n > fusemaxwrite)
 		n = fusemaxwrite;
 	/* size it to a multiple of the struct size. */
-	n -= n % sizeof(node);
+	n -= n % sizeof(struct bproc_node_info_t);
 	buf = calloc(1, n);
 	p = buf;
 	ep = buf + n;
 	offset = in->offset;
+	nodenum = offset / sizeof(struct bproc_node_info_t);
+	/* if they give us a bad node, what to do? Just break for now ... not sure */
 	while (p < ep) {
-		if (bprocnodeinfo(in->offset, p) < 0)
+		if (bprocnodeinfo(nodenum, (struct bproc_node_info_t *) p) < 0)
 			break;
 		p += sizeof(struct bproc_node_info_t);
+		nodenum++;
 	}
 out:			
 	replyfuse(m, buf, p - buf);

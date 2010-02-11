@@ -188,6 +188,8 @@ struct node_t {
 	int ping_in;		/* Data in since last ping interval. */
 	/* permissions -- used to be in kernel */
 	int mode, user, group;
+	/* for later. */
+	time_t atime, mtime, ctime;
 };
 
 struct assoc_t {
@@ -655,20 +657,22 @@ bprocnode(int node)
 int
 bprocnodeinfo(int n, struct bproc_node_info_t *node)
 {
-	int ret = -1;
-	if (n < conf.num_nodes) {
-		node->node = conf.nodes[n].id;
-		strncpy(node->status, "up", sizeof(node->status));
-		node->mode = 0666;
-		node->user = 0;
-		node->group = 0;
-		node->atime = now();
-		node->mtime = now();
-		memcpy(&node->addr, conf.nodes[n].addr, sizeof(&node->addr));
-		ret = 0;
-	}
+	struct node_t *bp = nodep(n);
 
-	return ret;
+	if (! bp)
+		return -1;
+	node->node = bp->id;
+	if (node->status)
+		strncpy(node->status, "up", sizeof(node->status));
+	else
+		strncpy(node->status, "down", sizeof(node->status));
+	node->mode = bp->mode;
+	node->user = bp->user;
+	node->group = bp->group;
+	node->atime = now();
+	node->mtime = now();
+	memcpy(&node->addr, bp->addr, sizeof(&node->addr));
+	return 0;
 }
 int
 numnodes(void)
