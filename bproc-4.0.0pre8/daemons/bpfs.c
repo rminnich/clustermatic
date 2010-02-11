@@ -81,6 +81,7 @@ fillattr(__u64  inode, struct fuse_attr *attr)
 	memset(attr, 0, sizeof attr);
 	extern struct config_t tc;
 	int numnodes(void);
+	struct bproc_node_info_t node;
 
 	if (inode == 1) {
 		attr->ino = 1;
@@ -132,12 +133,14 @@ fillattr(__u64  inode, struct fuse_attr *attr)
 	}
 	if (inode & 0x100000) {
 		unsigned long node = inode & ~0x100000;
+		struct bproc_node_info_t info;
+		bprocnodeinfo(node, &info);
 		attr->ino = inode;
 		attr->size = 1;
 		attr->blocks = (1)/8192;
-		attr->atime = now();
-		attr->mtime = 0;
-		attr->ctime = 0;
+		attr->atime = info.atime;
+		attr->mtime = info.mtime;
+		attr->ctime = info.ctime;
 		attr->atimensec = 0;
 		attr->mtimensec = 0;
 		attr->ctimensec = 0;

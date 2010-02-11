@@ -910,17 +910,19 @@ syslog(LOG_NOTICE, "dirname %s", dirname);
 	syslog(LOG_NOTICE, "chdir %s", dirname);
 #if 0
 	p = popen("cpio -i ", "w");
-syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
+	syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
 	cpiolen = len - (cp - msg);
 	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
 	fwrite(cp, 1,  cpiolen, p);
 	fclose(p);
-#endif
-	if (cpio(msg, len - (cp-msg), "./") < 0) {
+#else
+	cpiolen = len - (cp - msg);
+	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
+	if (cpio(cp, cpiolen, "./") < 1) {
 		syslog(LOG_NOTICE, "do_run: cpio failed");
 		return;
 	}
-
+#endif
 	/* let's run it. */
 syslog(LOG_NOTICE, "ready to go");
 	if (fork() == 0) {

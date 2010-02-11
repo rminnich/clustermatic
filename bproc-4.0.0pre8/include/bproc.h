@@ -85,6 +85,7 @@ struct bproc_node_info_t {
 	unsigned int group;
 	struct sockaddr addr;
 	time_t atime;
+	time_t ctime;
 	time_t mtime;
 };
 

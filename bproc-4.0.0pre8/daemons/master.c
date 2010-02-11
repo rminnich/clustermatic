@@ -632,6 +632,7 @@ struct node_t *add_node(int node)
 
 	memset(n, 0, sizeof(*n));
 	n->id = node;
+	n->ctime = n->mtime = now();
 	INIT_LIST_HEAD(&n->reqs);
 	INIT_LIST_HEAD(&n->clist);
 	return n;
@@ -736,6 +737,7 @@ int add_node_ip(int node, struct in_addr addr)
 	n->addr = tmp;
 	n->addr[n->naddr] = addr;
 	n->naddr++;
+	n->mtime = now();
 	return 0;
 }
 
@@ -1506,6 +1508,7 @@ void set_node_addr(struct node_t *s)
 	struct nodeset_setaddr_t addr;
 
 	addr.id = s->id;
+	s->mtime = now();
 	if (s->running) {
 		struct sockaddr_in *a = (struct sockaddr_in *)&addr.addr;
 		memset(a, 0, sizeof(*a));
@@ -1513,12 +1516,6 @@ void set_node_addr(struct node_t *s)
 		a->sin_addr = s->running->raddr;
 	} else
 		memset(&addr.addr, 0, sizeof(addr.addr));
-#if 0
-	if (ioctl(ghostfd, BPROC_NODESET_SETADDR, &addr)) {
-		syslog(LOG_ERR, "nodeset_setaddr(%d): %s\n",
-		       s->id, strerror(errno));
-	}
-#endif
 	/* This is a bit of a questionable hack right now.  The master can
 	 * have multiple addresses with slaves at once.  In order to try
 	 * and do something reasonable for both the simple and complex
@@ -1531,12 +1528,6 @@ void set_node_addr(struct node_t *s)
 		memset(a, 0, sizeof(*a));
 		a->sin_family = AF_INET;
 		a->sin_addr = s->running->laddr;
-#if 0
-		if (ioctl(ghostfd, BPROC_NODESET_SETADDR, &addr)) {
-			syslog(LOG_ERR, "nodeset_setaddr(%d): %s\n",
-			       s->id, strerror(errno));
-		}
-#endif
 	}
 }
 
@@ -1544,6 +1535,7 @@ static
 void run_node_up(struct node_t *s)
 {
 	int pid, i;
+	s->mtime = now();
 	/* no longer needed */
 	return;
 	pid = fork();
@@ -1794,6 +1786,7 @@ void slave_set_ready(struct node_t *s, struct conn_t *conn)
 		 * us. */
 		conn_send_conf(conn);
 	}
+	s->mtime = now();
 }
 
 static
@@ -1850,6 +1843,7 @@ void send_version(struct conn_t *c)
 static
 void send_ping(struct node_t *s)
 {
+	s->atime = now();
 	conn_send_ping(s->running);
 }
 
@@ -1862,6 +1856,7 @@ void slave_new_connection(struct node_t *s, struct interface_t *ifc,
 
 	if (s->status == 0)
 		s->cookie = cookie_seq++;
+	s->mtime = now();
 
 	conn = &connections[fd];
 	conn->node = s;
