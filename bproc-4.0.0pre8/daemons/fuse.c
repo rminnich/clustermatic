@@ -828,7 +828,8 @@ int mountfuse(char *mtpt)
 		close(p[1]);
 		snprintf(buf, sizeof buf, "_FUSE_COMMFD=%d", p[0]);
 		putenv(buf);
-		execlp("fusermount", "fusermount", "--", mtpt, NULL);
+		/* need to set allow_other */
+		execlp("fusermount", "fusermount", "-oallow_other", mtpt, NULL);
 		perror("exec fusermount");
 		exit(1);
 	}

@@ -13,90 +13,6 @@
 #define nelem(x) (sizeof(x)/sizeof(x[0]))
 #include "a.h"
 
-static int xmp_getattr(const char *path, struct stat *stbuf)
-{
-	int res;
-
-	res = lstat(path, stbuf);
-	if (res == -1)
-		return -errno;
-
-	return 0;
-}
-
-static int xmp_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
-{
-	DIR *dp;
-	struct dirent *de;
-	int res = 0;
-
-	dp = opendir(path);
-	if (dp == NULL)
-		return -errno;
-
-	while ((de = readdir(dp)) != NULL) {
-		res = filler(h, de->d_name, de->d_type);
-		if (res != 0)
-			break;
-	}
-
-	closedir(dp);
-	return res;
-}
-
-static int xmp_chmod(const char *path, mode_t mode)
-{
-	int res;
-
-	res = chmod(path, mode);
-	if (res == -1)
-		return -errno;
-
-	return 0;
-}
-
-static int xmp_chown(const char *path, uid_t uid, gid_t gid)
-{
-	int res;
-
-	res = lchown(path, uid, gid);
-	if (res == -1)
-		return -errno;
-
-	return 0;
-}
-
-static int xmp_utime(const char *path, struct utimbuf *buf)
-{
-	int res;
-
-	res = utime(path, buf);
-	if (res == -1)
-		return -errno;
-
-	return 0;
-}
-
-static int xmp_open(const char *path, int flags)
-{
-	int res;
-
-	res = open(path, flags);
-	if (res == -1)
-		return -errno;
-
-	close(res);
-	return 0;
-}
-
-static int xmp_read(const char *path, char *buf, size_t size, off_t offset)
-{
-	int fd;
-	int res;
-
-	return -1;
-}
-
 #if 0
 friggin example code fails. great. 
 static int xmp_statfs(struct fuse_statfs *fst)
@@ -169,6 +85,23 @@ fuseopendir(FuseMsg *m)
 	in = m->tx;
 	if (m->hdr->nodeid == 1) {
 		out.fh = 1;
+	} else {
+		replyfuseerrno(m, ENOENT);
+		return;
+	}
+	replyfuse(m, &out, sizeof out);
+}
+
+void
+fuseopen(FuseMsg *m)
+{
+	struct fuse_open_in *in;
+	struct fuse_open_out out;
+
+	/* there's really only one file to open -- status. All else is an error. */
+	in = m->tx;
+	if (m->hdr->nodeid == 3) {
+		out.fh = m->hdr->nodeid;
 	} else {
 		replyfuseerrno(m, ENOENT);
 		return;
@@ -500,6 +433,35 @@ out:
 	replyfuse(m, buf, p - buf);
 	free(buf);
 }
+/* 
+ * Read.
+ * There's only one file to read -- status. 
+ */
+
+void
+fuseread(FuseMsg *m)
+{
+	struct fuse_read_in *in;
+	unsigned char *buf, *p, *ep;
+	int n;
+	loff_t offset;
+	
+	in = m->tx;
+	if(in->fh != 3){
+		replyfuseerrno(m, ESTALE);
+		return;
+	}	
+	n = in->size;
+	if(n > fusemaxwrite)
+		n = fusemaxwrite;
+	buf = calloc(1, n);
+	p = buf;
+	ep = buf + n;
+	offset = in->offset;
+out:			
+	replyfuse(m, buf, p - buf);
+	free(buf);
+}
 /*
  * Release.
  *
@@ -525,6 +487,7 @@ struct {
 	int op;
 	void (*fn)(FuseMsg*);
 } fuselist[] = {
+	{ FUSE_OPEN,		fuseopen },
 	{ FUSE_STATFS,		fusestatfs },
 	{ FUSE_OPENDIR,		fuseopendir },
 	{ FUSE_LOOKUP,		fuselookup },
@@ -533,6 +496,7 @@ struct {
 	{ FUSE_RELEASEDIR,	fusereleasedir },
 	{ FUSE_RELEASE,		fuserelease },
 	{ FUSE_SETATTR,		fusesetattr },
+	{ FUSE_READ,		fuseread },
 #if 0
 	{ FUSE_FORGET,		fuseforget },
 	/*
@@ -547,7 +511,6 @@ struct {
 	 * FUSE_LINK is unimplemented.
 	 */
 	{ FUSE_OPEN,		fuseopen },
-	{ FUSE_READ,		fuseread },
 	{ FUSE_WRITE,		fusewrite },
 	{ FUSE_FSYNC,		fusefsync },
 	/*

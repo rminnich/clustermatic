@@ -50,7 +50,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#include <sys/bproc.h>
+#include <bproc.h>
 #include <cmconf.h>
 
 #include <sexp.h>
@@ -318,7 +318,8 @@ void bjs_node_allocate(struct bjs_job_t *j, int node, int exclusive) {
 
 static struct bproc_node_set_t clean_set = BPROC_EMPTY_NODESET;
 void bjs_do_clean(void) {
-#if 1
+	/* the way we will be cleaning a node is rebooting it, in future */
+#if 0
     int i, j, nprocs, killed_one;
     struct bproc_proc_info_t *plist;
 
@@ -353,8 +354,6 @@ void bjs_do_clean(void) {
 
 	if (nprocs > 0) free(plist);
     } while(killed_one);
-#else
-#warning "bjs_do_clean is commented out!!!!"
 #endif
 
     bproc_nodeset_free(&clean_set);
@@ -1659,8 +1658,7 @@ int config_nodes_callback(struct cmconf *cnf, char **args) {
 
     for (i=1; args[i]; i++) {
 	if (bproc_nodelist(&ns) == -1) {
-	    syslog(LOG_ERR, "Failed to get BProc node set: %s",
-		   bproc_strerror(errno));
+	    syslog(LOG_ERR, "Failed to get BProc node set");
 	    return -1;
 	}
 
@@ -2195,7 +2193,7 @@ int update_machine_status(int status_fd) {
     read(bproc_notify_fd, 0, 0);
 
     if (bproc_nodelist_(&ns, status_fd) == -1) {
-	syslog(LOG_ERR, "bproc_nodelist: %s", bproc_strerror(errno));
+	syslog(LOG_ERR, "bproc_nodelist: fail");
 	return -1;
     }
 
