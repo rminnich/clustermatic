@@ -1544,6 +1544,8 @@ static
 void run_node_up(struct node_t *s)
 {
 	int pid, i;
+	/* no longer needed */
+	return;
 	pid = fork();
 	if (pid == -1) {
 		syslog(LOG_ERR,

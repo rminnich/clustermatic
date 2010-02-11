@@ -90,6 +90,7 @@ void bproc_nodeset_free(struct bproc_node_set_t *n)
 int bproc_nodeset_grow(struct bproc_node_set_t *ns, int size)
 {
 	/* Round up to the next chunk size */
+printf("bproc nodeset grow: alloc %d size %d\n", ns->alloc, size);
 	size = (size + ALLOC_CHUNK - 1) & ~(ALLOC_CHUNK - 1);
 	if (ns->alloc < size) {
 		struct bproc_node_info_t *tmp;
