@@ -39,11 +39,11 @@
 /*--- BProc version tag stuff --------------------------------------*/
 #define BPROC_MAGIC {'B','P','r'}
 enum {
-    BPROC_ARCH_X86 = 1,
-    BPROC_ARCH_ALPHA = 2,
-    BPROC_ARCH_PPC = 3,
-    BPROC_ARCH_X86_64 = 4,
-    BPROC_ARCH_PPC64 = 5
+	BPROC_ARCH_X86 = 1,
+	BPROC_ARCH_ALPHA = 2,
+	BPROC_ARCH_PPC = 3,
+	BPROC_ARCH_X86_64 = 4,
+	BPROC_ARCH_PPC64 = 5
 };
 #if defined(__i386__)
 #define BPROC_ARCH BPROC_ARCH_X86
@@ -60,14 +60,13 @@ enum {
 #endif
 
 struct bproc_version_t {
-    char     bproc_magic[3];
-    uint8_t  arch;
-    uint32_t magic;
-    char     version_string[24];
+	char bproc_magic[3];
+	uint8_t arch;
+	uint32_t magic;
+	char version_string[24];
 };
 
 /*--- Structs passed in and out of the kernel ----------------------*/
-
 
 /* All BProc attributes start with this */
 #define BPROC_XATTR_PREFIX   "bproc."
@@ -77,61 +76,58 @@ struct bproc_version_t {
 #define BPROC_XATTR_MAX_VALUE_SIZE 64
 #define BPROC_XATTR_MAX      32	/* max # of extended attributes */
 
-
-
-
-
 #define BPROC_STATE_LEN 15
 struct bproc_node_info_t {
-    int      node;
-    char     status[BPROC_STATE_LEN+1];
-    unsigned int mode;
-    unsigned int user;
-    unsigned int group;
-    struct sockaddr addr;
+	int node;
+	char status[BPROC_STATE_LEN + 1];
+	unsigned int mode;
+	unsigned int user;
+	unsigned int group;
+	struct sockaddr addr;
+	unsigned long atime;
+	unsigned long mtime;
 };
 
 /* I/O connection types */
-#define BPROC_IO_MAX_LEN      16 /* max # of I/O redirections to setup */
+#define BPROC_IO_MAX_LEN      16	/* max # of I/O redirections to setup */
 #define BPROC_IO_FILE      0x000
 #define BPROC_IO_SOCKET    0x001
-#define BPROC_IO_MEMFILE   0x002 /* used internally by bproc */
+#define BPROC_IO_MEMFILE   0x002	/* used internally by bproc */
 
 /* I/O setup flags */
 #define BPROC_IO_SEND_INFO 0x001
 #define BPROC_IO_DELAY     0x002
 
 struct bproc_io_t {
-    int fd;
-    short type;
-    short flags;
-    union {
-	struct sockaddr addr;
-	struct {
-	    int   flags;
-	    int   mode;
-	    long  offset;
-	    char  name[256];
-	} file;
-	struct {
-	    void *base;
-	    long  size;
-        } mem; 
-    } d;
+	int fd;
+	short type;
+	short flags;
+	union {
+		struct sockaddr addr;
+		struct {
+			int flags;
+			int mode;
+			long offset;
+			char name[256];
+		} file;
+		struct {
+			void *base;
+			long size;
+		} mem;
+	} d;
 };
 
 struct bproc_proc_info_t {
-    int pid;
-    int node;
+	int pid;
+	int node;
 };
-
 
 /*--- BProc specific errno values ----------------------------------*/
 
 #define BE_BASE           300
 #define BE_INVALIDNODE    (BE_BASE+0)
 #define BE_NODEDOWN       (BE_BASE+1)
-#define BE_SAMENODE       (BE_BASE+2) /* formerly ELOOP */
+#define BE_SAMENODE       (BE_BASE+2)	/* formerly ELOOP */
 #define BE_SLAVEDIED      (BE_BASE+3)
 #define BE_INVALIDPROC    (BE_BASE+4)
 
@@ -643,9 +639,9 @@ struct sockaddr;
 #include <sys/socket.h>
 
 struct bproc_node_set_t {
-    int size, alloc;
-    struct bproc_node_info_t *node;
-    /* XXX Maybe add ID map stuff in here ? */
+	int size, alloc;
+	struct bproc_node_info_t *node;
+	/* XXX Maybe add ID map stuff in here ? */
 };
 
 #define BPROC_EMPTY_NODESET {0, 0, 0}
@@ -657,112 +653,112 @@ extern "C" {
 /*--------------------------------------------------------------------
  * Node information functions
  *------------------------------------------------------------------*/
-int  bproc_numnodes(void);
-int  bproc_currnode(void);
-int  bproc_nodestatus(int node, char *status, int len);
-int  bproc_nodeaddr(int node, struct sockaddr *s, int *size);
+	int bproc_numnodes(void);
+	int bproc_currnode(void);
+	int bproc_nodestatus(int node, char *status, int len);
+	int bproc_nodeaddr(int node, struct sockaddr *s, int *size);
 
-int  bproc_nodeinfo  (int node, struct bproc_node_info_t *info);
-int  bproc_nodelist  (struct bproc_node_set_t *ns);
-int  bproc_nodelist_ (struct bproc_node_set_t *ns, int fd);
+	int bproc_nodeinfo(int node, struct bproc_node_info_t *info);
+	int bproc_nodelist(struct bproc_node_set_t *ns);
+	int bproc_nodelist_(struct bproc_node_set_t *ns, int fd);
 
-int  bproc_getnodeattr(int node, char *name, void *value, int size);
-
+	int bproc_getnodeattr(int node, char *name, void *value, int size);
 
 /* Node permission / access control stuff */
-int  bproc_chmod(int node, int mode);
-int  bproc_chown(int node, int user);
-int  bproc_chgrp(int node, int group);
-int  bproc_access(int node, int mode);
+	int bproc_chmod(int node, int mode);
+	int bproc_chown(int node, int user);
+	int bproc_chgrp(int node, int group);
+	int bproc_access(int node, int mode);
 
 /* Process information functions */
-int  bproc_proclist(int node, struct bproc_proc_info_t **list);
-int  bproc_pidnode (int pid);
-
+	int bproc_proclist(int node, struct bproc_proc_info_t **list);
+	int bproc_pidnode(int pid);
 
 /*--------------------------------------------------------------------
  * Node set functions
  *------------------------------------------------------------------*/
-int  bproc_nodeset_init(struct bproc_node_set_t *ns, int size);
-int  bproc_nodeset_grow(struct bproc_node_set_t *ns, int size);
-void bproc_nodeset_free(struct bproc_node_set_t *ns);
+	int bproc_nodeset_init(struct bproc_node_set_t *ns, int size);
+	int bproc_nodeset_grow(struct bproc_node_set_t *ns, int size);
+	void bproc_nodeset_free(struct bproc_node_set_t *ns);
 #define bproc_node_set_node(ns,nn) (&(ns)->node[(nn)])
-int  bproc_nodeset_add   (struct bproc_node_set_t *ns,
-			  struct bproc_node_info_t *n);
-int  bproc_nodeset_append(struct bproc_node_set_t *a,
-			  struct bproc_node_set_t *b);
+	int bproc_nodeset_add(struct bproc_node_set_t *ns,
+			      struct bproc_node_info_t *n);
+	int bproc_nodeset_append(struct bproc_node_set_t *a,
+				 struct bproc_node_set_t *b);
 
-int  bproc_nodefilter(struct bproc_node_set_t *out,
-		      struct bproc_node_set_t *in, const char *str);
+	int bproc_nodefilter(struct bproc_node_set_t *out,
+			     struct bproc_node_set_t *in, const char *str);
 
 /*--------------------------------------------------------------------
  * Process migration / remote process creation interfaces.
  *------------------------------------------------------------------*/
-int  bproc_rexec_io   (int node, struct bproc_io_t *io, int iolen,
-		       const char *cmd, char * const argv[],
-		       char * const envp[]);
-int  bproc_rexec      (int node, const char *cmd, char * const argv[],
-		       char * const envp[]);
-int _bproc_move_io    (int node, struct bproc_io_t *io, int iolen, int flags);
-int  bproc_move_io    (int node, struct bproc_io_t *io, int iolen);
-int _bproc_move       (int node, int flags);
-int  bproc_move       (int node);
+	int bproc_rexec_io(int node, struct bproc_io_t *io, int iolen,
+			   const char *cmd, char *const argv[],
+			   char *const envp[]);
+	int bproc_rexec(int node, const char *cmd, char *const argv[],
+			char *const envp[]);
+	int _bproc_move_io(int node, struct bproc_io_t *io, int iolen,
+			   int flags);
+	int bproc_move_io(int node, struct bproc_io_t *io, int iolen);
+	int _bproc_move(int node, int flags);
+	int bproc_move(int node);
 
-int _bproc_rfork_io   (int node, struct bproc_io_t *io, int iolen, int flags);
-int  bproc_rfork_io   (int node, struct bproc_io_t *io, int iolen);
-int _bproc_rfork      (int node, int flags);
-int  bproc_rfork      (int node);
+	int _bproc_rfork_io(int node, struct bproc_io_t *io, int iolen,
+			    int flags);
+	int bproc_rfork_io(int node, struct bproc_io_t *io, int iolen);
+	int _bproc_rfork(int node, int flags);
+	int bproc_rfork(int node);
 
-int _bproc_vrfork_io  (int nnodes, int *nodes, int *pids,
-		       struct bproc_io_t *io, int iolen, int flags);
-int  bproc_vrfork_io  (int nnodes, int *nodes, int *pids,
-		       struct bproc_io_t *io, int iolen);
-int _bproc_vrfork     (int nnodes, int *nodes, int *pids, int flags);
-int  bproc_vrfork     (int nnodes, int *nodes, int *pids);
+	int _bproc_vrfork_io(int nnodes, int *nodes, int *pids,
+			     struct bproc_io_t *io, int iolen, int flags);
+	int bproc_vrfork_io(int nnodes, int *nodes, int *pids,
+			    struct bproc_io_t *io, int iolen);
+	int _bproc_vrfork(int nnodes, int *nodes, int *pids, int flags);
+	int bproc_vrfork(int nnodes, int *nodes, int *pids);
 
-int  bproc_execmove_io(int node, struct bproc_io_t *io, int iolen,
-		       const char *cmd, char * const argv[],
-		       char * const envp[]);
-int  bproc_execmove   (int node, const char *cmd, char * const argv[],
-		       char * const envp[]);
+	int bproc_execmove_io(int node, struct bproc_io_t *io, int iolen,
+			      const char *cmd, char *const argv[],
+			      char *const envp[]);
+	int bproc_execmove(int node, const char *cmd, char *const argv[],
+			   char *const envp[]);
 
-int  bproc_vexecmove_io(int nnodes, int *nodes, int *pids,
-		       struct bproc_io_t *io, int iolen,
-		       const char *cmd, char * const argv[],
-		       char * const envp[]);
-int  bproc_vexecmove  (int nnodes, int *nodes, int *pids,
-		       const char *cmd, char * const argv[],
-		       char * const envp[]);
+	int bproc_vexecmove_io(int nnodes, int *nodes, int *pids,
+			       struct bproc_io_t *io, int iolen,
+			       const char *cmd, char *const argv[],
+			       char *const envp[]);
+	int bproc_vexecmove(int nnodes, int *nodes, int *pids,
+			    const char *cmd, char *const argv[],
+			    char *const envp[]);
 
-int  bproc_execve     (const char *cmd, char * const argv[], 
-		       char * const envp[]);
+	int bproc_execve(const char *cmd, char *const argv[],
+			 char *const envp[]);
 
 /* Administrative type functions */
-int  bproc_nodechroot      (int node, char *path);
-int  bproc_nodereboot      (int node);
-int  bproc_nodehalt        (int node);
-int  bproc_nodepwroff      (int node);
-int  bproc_nodereboot_async(int node);
-int  bproc_nodehalt_async  (int node);
-int  bproc_nodepwroff_async(int node);
+	int bproc_nodechroot(int node, char *path);
+	int bproc_nodereboot(int node);
+	int bproc_nodehalt(int node);
+	int bproc_nodepwroff(int node);
+	int bproc_nodereboot_async(int node);
+	int bproc_nodehalt_async(int node);
+	int bproc_nodepwroff_async(int node);
 
-int  bproc_nodesetstatus   (int node, char *status);
-int  bproc_setnodeattr     (int node, char *name, void *value, int size);
+	int bproc_nodesetstatus(int node, char *status);
+	int bproc_setnodeattr(int node, char *name, void *value, int size);
 
-int  bproc_nodereconnect   (int node, struct sockaddr *_rem, int remsize,
-			    struct sockaddr *_loc, int locsize);
+	int bproc_nodereconnect(int node, struct sockaddr *_rem, int remsize,
+				struct sockaddr *_loc, int locsize);
 
-const char *bproc_strerror(int err);
+	const char *bproc_strerror(int err);
 
-int  bproc_version(struct bproc_version_t *vers);
-int  bproc_notifier(void);
+	int bproc_version(struct bproc_version_t *vers);
+	int bproc_notifier(void);
 
 /* Utility functions - this one is going away... */
-int bproc_nodespec(struct bproc_node_set_t *ns, const char *str);
-int bprocnode(int node);
-int bprocuid(int node, int uid);
-int bprocgid(int node, int gid);
-
+	int bproc_nodespec(struct bproc_node_set_t *ns, const char *str);
+	int bprocnode(int node);
+	int bprocuid(int node, int uid);
+	int bprocgid(int node, int gid);
+	int bprocmode(int node, int mode);
 
 #ifdef __cplusplus
 }

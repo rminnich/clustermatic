@@ -230,6 +230,7 @@ fillattr(__u64  inode, struct fuse_attr *attr)
 		attr->rdev = 0;
 	}
 	if (inode & 0x100000) {
+		unsigned long node = inode & ~0x100000;
 		attr->ino = inode;
 		attr->size = 1;
 		attr->blocks = (1)/8192;
@@ -239,10 +240,10 @@ fillattr(__u64  inode, struct fuse_attr *attr)
 		attr->atimensec = 0;
 		attr->mtimensec = 0;
 		attr->ctimensec = 0;
-		attr->mode = S_IFREG|0444;
+		attr->mode = S_IFREG|bprocmode(node, -1);;
 		attr->nlink = 1;	/* works for directories! - see FUSE FAQ */
-		attr->uid = 0;
-		attr->gid = 0;
+		attr->uid = bprocuid(node, -1);
+		attr->gid = bprocgid(node, -1);
 		attr->rdev = 0;
 	}
 }
@@ -257,7 +258,8 @@ nodenum(char *name)
 
 	i = strtoul(name, 0, 10);
 
-	i = bprocnode(i);
+	if (bprocnode(i) < 0)
+		return -1;
 	return i;
 }
 /*
@@ -321,10 +323,11 @@ fusesetattr(FuseMsg *m)
 	struct fuse_setattr_in *in;
 	struct fuse_attr_out out;
 	int node = m->hdr->nodeid;
-	int ok = FATTR_UID | FATTR_GID;
+	int ok = FATTR_UID | FATTR_GID | FATTR_MODE;
 
 	/* we can only change node attributes */
 
+	in = m->tx;
 	if (! (node & 0x100000)){
 		replyfuseerrno(m, ESTALE);
 		return;
@@ -342,10 +345,9 @@ fusesetattr(FuseMsg *m)
 		d.atime = in->atime;
 	if(in->valid&FATTR_MTIME)
 		d.mtime = in->mtime;
-	if(in->valid&FATTR_MODE)
+	if(in->valid&)
 		d.mode = in->mode;
 #endif
-
 	if (in->valid & (~ ok)) {
 		replyfuseerrno(m, EPERM);
 		return;
@@ -358,7 +360,14 @@ fusesetattr(FuseMsg *m)
 		bprocgid(node, in->gid);
 	}
 
-stat:
+	if (in->valid&FATTR_MODE){
+		if ((in->mode & (S_IFREG|0666)) != in->mode) {
+			replyfuseerrno(m, EPERM);
+			return;
+		}
+		bprocmode(node, in->mode);
+	}
+tat:
 	memset(&out, 0, sizeof out);
 	fillattr(m->hdr->nodeid, &out.attr);
 	replyfuse(m, &out, sizeof out);

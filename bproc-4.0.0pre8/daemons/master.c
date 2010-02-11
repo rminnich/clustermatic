@@ -26,6 +26,7 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+
 #include <sys/un.h>
 #include <sys/resource.h>
 #include <time.h>
@@ -657,7 +658,9 @@ bprocuid(int node, int uid)
 	if (! n)
 		return -1;
 
-	return n->user = uid;
+	if (uid > -1)
+		n->user = uid;
+	return n->user;
 }
 
 int
@@ -667,8 +670,21 @@ bprocgid(int node, int gid)
 	if (! n)
 		return -1;
 
+	if (gid > -1)
+		n->group = gid;
+	return n->group;
+}
 
-	return n->group = gid;
+int
+bprocmode(int node, int mode)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
+		return -1;
+
+	if (mode > -1)
+		n->mode = mode;
+	return n->mode;
 }
 
 static
@@ -1127,26 +1143,29 @@ const char *get_bpfs_path(void)
 	return bpfs_path;
 }
 
+time_t now(void)
+{
+	struct timeval t;
+	gettimeofday(&t, NULL);
+	return t.tv_sec;
+}
+
 static
 void upate_bpfs(void)
 {
 	int i;
-	FILE *bpfs; 
 	struct bproc_node_info_t node;
-	char status[128];
 
-	sprintf(status, "%s/%s", get_bpfs_path(), "status");
-	bpfs = fopen(status, "w");
 	for (i = 0; i < conf.num_nodes; i++){
 		node.node = conf.nodes[i].id;
 		strncpy(node.status, "up", sizeof(node.status));
 		node.mode = 0666;
 		node.user = 0;
 		node.group = 0;
+		node.atime = now();
+		node.mtime = now();
 		memcpy(&node.addr, conf.nodes[i].addr, sizeof(&node.addr));
-		fwrite(&node, sizeof(node), 1, bpfs);
 	}
-	fclose(bpfs);
 
 }
 
@@ -1885,7 +1904,7 @@ int accept_new_slave(struct interface_t *ifc)
 					       conf.nodes[i].id);
 				slave_new_connection(&conf.nodes[i], ifc,
 						     &remote, slavefd);
-				//upate_bpfs();
+				upate_bpfs();
 				return 0;
 			}
 		}
@@ -3094,6 +3113,8 @@ int main(int argc, char *argv[])
 
 	if (want_daemonize)
 		daemonize();
+
+	upate_bpfs();
 
 	{
 		int r;
