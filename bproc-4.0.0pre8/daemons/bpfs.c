@@ -13,43 +13,8 @@
 #define nelem(x) (sizeof(x)/sizeof(x[0]))
 #include "a.h"
 
-#if 0
-friggin example code fails. great. 
-static int xmp_statfs(struct fuse_statfs *fst)
-{
-    struct statfs st;
-    int rv = statfs("/",&st);
-    if(!rv) {
-    	fst->block_size  = st.f_bsize;
-    	fst->blocks      = st.f_blocks;
-    	fst->blocks_free = st.f_bavail;
-    	fst->files       = st.f_files;
-    	fst->files_free  = st.f_ffree;
-    	fst->namelen     = st.f_namelen;
-    }
-    return rv;
-}
-#endif
-
-static int xmp_release(const char *path, int flags)
-{
-    /* Just a stub.  This method is optional and can safely be left
-       unimplemented */
-
-    (void) path;
-    (void) flags;
-    return 0;
-}
-
-static int xmp_fsync(const char *path, int isdatasync)
-{
-    /* Just a stub.  This method is optional and can safely be left
-       unimplemented */
-
-    (void) path;
-    (void) isdatasync;
-    return 0;
-}
+time_t statusatime = 0;
+time_t statusmtime = 0;
 
 void
 f2timeout(double f, __u64 *s, __u32 *ns)
@@ -58,6 +23,7 @@ f2timeout(double f, __u64 *s, __u32 *ns)
 	*ns = (f - (int)f)*1e9;
 }
 
+time_t now(void);
 
 /*
  * Statfs.  Send back information about file system.
@@ -113,6 +79,8 @@ void
 fillattr(__u64  inode, struct fuse_attr *attr)
 {
 	memset(attr, 0, sizeof attr);
+	extern struct config_t tc;
+	int numnodes(void);
 
 	if (inode == 1) {
 		attr->ino = 1;
@@ -148,11 +116,11 @@ fillattr(__u64  inode, struct fuse_attr *attr)
 	}
 	if (inode == 3) {
 		attr->ino = 3;
-		attr->size = 1;
-		attr->blocks = (1)/8192;
-		attr->atime = 0;
-		attr->mtime = 0;
-		attr->ctime = 0;
+		attr->size =numnodes() * sizeof(struct bproc_node_info_t);
+		attr->blocks = (attr->size)/8192;
+		attr->atime = statusatime;
+		attr->mtime = statusmtime;
+		attr->ctime = statusmtime;
 		attr->atimensec = 0;
 		attr->mtimensec = 0;
 		attr->ctimensec = 0;
@@ -167,7 +135,7 @@ fillattr(__u64  inode, struct fuse_attr *attr)
 		attr->ino = inode;
 		attr->size = 1;
 		attr->blocks = (1)/8192;
-		attr->atime = 0;
+		attr->atime = now();
 		attr->mtime = 0;
 		attr->ctime = 0;
 		attr->atimensec = 0;
@@ -441,11 +409,14 @@ out:
 void
 fuseread(FuseMsg *m)
 {
+	int bprocnodeinfo(int n, struct bproc_node_info_t *node);
+
 	struct fuse_read_in *in;
 	unsigned char *buf, *p, *ep;
 	int n;
 	loff_t offset;
 	
+	statusatime = now();
 	in = m->tx;
 	if(in->fh != 3){
 		replyfuseerrno(m, ESTALE);
@@ -454,10 +425,17 @@ fuseread(FuseMsg *m)
 	n = in->size;
 	if(n > fusemaxwrite)
 		n = fusemaxwrite;
+	/* size it to a multiple of the struct size. */
+	n -= n % sizeof(node);
 	buf = calloc(1, n);
 	p = buf;
 	ep = buf + n;
 	offset = in->offset;
+	while (p < ep) {
+		if (bprocnodeinfo(in->offset, p) < 0)
+			break;
+		p += sizeof(struct bproc_node_info_t);
+	}
 out:			
 	replyfuse(m, buf, p - buf);
 	free(buf);
@@ -557,3 +535,8 @@ fprintf(stderr, "fusedispatch: op %d\n", m->hdr->opcode);
 	fusehandlers[m->hdr->opcode](m);
 }
 
+void
+bpfsinit(void)
+{
+	statusatime = statusmtime = now();
+}

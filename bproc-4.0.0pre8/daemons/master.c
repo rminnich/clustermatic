@@ -234,7 +234,7 @@ struct config_t {
 	int slave_private_namespace;	/* XXX should be per-slave */
 };
 
-static struct config_t conf;
+struct config_t conf;
 
 /* Sequence number for the cookies to hand out to slaves.  This isn't
  * intended to provide any security.  It's just there to prevent an
@@ -268,6 +268,7 @@ static struct bproc_version_t version =
 	PACKAGE_VERSION 
 };
 
+time_t now(void);
 static void remove_slave(struct node_t *s, struct conn_t *c);
 static void remove_slave_connection(struct conn_t *conn);
 static LIST_HEAD(conn_dead);	/* list of dead connections which need to be cleaned up. */
@@ -649,6 +650,30 @@ bprocnode(int node)
 		return -1;
 
 	return n->id;
+}
+
+int
+bprocnodeinfo(int n, struct bproc_node_info_t *node)
+{
+	int ret = -1;
+	if (n < conf.num_nodes) {
+		node->node = conf.nodes[n].id;
+		strncpy(node->status, "up", sizeof(node->status));
+		node->mode = 0666;
+		node->user = 0;
+		node->group = 0;
+		node->atime = now();
+		node->mtime = now();
+		memcpy(&node->addr, conf.nodes[n].addr, sizeof(&node->addr));
+		ret = 0;
+	}
+
+	return ret;
+}
+int
+numnodes(void)
+{
+	return tc.num_nodes;
 }
 
 int
@@ -2316,6 +2341,7 @@ int accept_new_client(void)
 static
 int setup_fuse_client(char *fusemntpoint)
 {
+	void bpfsinit(void);
 	int clientfd;
 	struct epoll_event ev;
 	ev.events = EPOLLIN;
@@ -2360,6 +2386,7 @@ int setup_fuse_client(char *fusemntpoint)
 	}
 
 	conn_update_epoll(conn);
+	bpfsinit();
 	return 0;
 }
 

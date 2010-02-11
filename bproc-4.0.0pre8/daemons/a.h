@@ -10,6 +10,7 @@
 #include <sys/statfs.h>
 #include <dirent.h>
 #include <fuse.h>
+#include "bproc.h"
 
 
 #if defined(__APPLE__)
