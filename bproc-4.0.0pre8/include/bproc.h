@@ -84,8 +84,8 @@ struct bproc_node_info_t {
 	unsigned int user;
 	unsigned int group;
 	struct sockaddr addr;
-	unsigned long atime;
-	unsigned long mtime;
+	time_t atime;
+	time_t mtime;
 };
 
 /* I/O connection types */

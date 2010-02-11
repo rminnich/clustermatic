@@ -860,7 +860,6 @@ do_run(struct conn_t *c, struct request_t *req)
 	char **argv;
 	int envc, nodec;
 	char **env, **nodes;
-	char *cpio;
 	int flags;
 	char *dirname;
 	char cmd[128];
@@ -909,12 +908,19 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 syslog(LOG_NOTICE, "dirname %s", dirname);
 	chdir(dirname);
 	syslog(LOG_NOTICE, "chdir %s", dirname);
+#if 0
 	p = popen("cpio -i ", "w");
 syslog(LOG_NOTICE, "cp %p msg %p diff %d\n", cp, msg, (int) (cp-msg));
 	cpiolen = len - (cp - msg);
 	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
 	fwrite(cp, 1,  cpiolen, p);
 	fclose(p);
+#endif
+	if (cpio(msg, len - (cp-msg), "./") < 0) {
+		syslog(LOG_NOTICE, "do_run: cpio failed");
+		return;
+	}
+
 	/* let's run it. */
 syslog(LOG_NOTICE, "ready to go");
 	if (fork() == 0) {

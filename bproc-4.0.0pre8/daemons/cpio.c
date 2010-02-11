@@ -1,4 +1,3 @@
-#include "cpio.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -8,6 +7,7 @@
 #include <string.h>
 #include <archive.h>		/* libarchive */
 #include <archive_entry.h>  /* libarchive */
+#include "cpio.h"
 
 int cpio(void *buf, size_t len, const char *append_string) {
 	struct archive *arch_read;
