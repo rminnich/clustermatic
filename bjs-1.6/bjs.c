@@ -1109,13 +1109,24 @@ int client_setup_socket(char *path)
 	return fd;
 }
 
+/* it is *AMAZING* that so many  things in Linux do not *compile* 
+ * in an architecture-independent fashion. I mean, setting up ucred
+ * as u32? Yeesh! Plus the simple example you can find won't build
+ * any more on ubongo 9.10. No wonder I'm going to port this to a mac.
+ * Would be so cool if they could learn from Plan 9. 
+ */
+struct myucred {
+	unsigned long pid, uid, gid;
+};
+
 static
 int client_accept(void)
 {
-	int fd, size;
+	int fd;
+	socklen_t size;
 	struct sockaddr_un addr;
 	struct client_t *c;
-	struct ucred cred;
+	struct myucred cred;
 
 	size = sizeof(addr);
 	fd = accept(conf.client_sockfd, (struct sockaddr *)&addr, &size);
