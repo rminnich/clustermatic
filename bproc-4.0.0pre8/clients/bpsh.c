@@ -80,9 +80,10 @@ struct node_io {
 
 static int buffer_size = 4096;
 static volatile int max_exit = 0;
-static int num_nodes;
+static int num_nodes = 0, max_node = -1;
 static struct node_io *nodes;
 static int num_files;
+static int *map = NULL;
 /*static          int no_io = 0;*/
 
 /* The kernel rounds the size of our fd_set up so we should do it as well. */
@@ -408,11 +409,6 @@ static void sigchld_handler(void)
 }
 
 static
-void cleanup_children(void)
-{
-}
-
-static
 void forward_io_init(int flags, struct bproc_io_t *io, int iolen)
 {
 	int i, conn_per_node;
@@ -557,52 +553,51 @@ void forward_io_new_fd(int fd)
 {
 	int rfd, node;
 	int i;
+
 	if (read(fd, &node, sizeof(node)) != sizeof(node) || 
 		read(fd, &rfd, sizeof(rfd)) != sizeof(rfd)) {
 		fprintf(stderr, "bpsh: failed to read node id or rfd"
 			" from IO connection.\n");
 		close(fd);
 	} else {
-        	for (i = 0; i < num_nodes; i++)
-			if (nodes[i].node == node)
-				break;
 		
-		if (i >= num_nodes) {
+		if (node > max_node) {
 			fprintf(stderr,
-				"Node ID %d not found ", node);
+				"Node ID %d > max node %d ", node, max_node);
 			close(fd);
 			return;
 		}
-			
-		if (nodes[node].cnum == 0) {
+		i = map[node];
+
+		if (nodes[i].cnum == 0) {
 			fprintf(stderr,
 				"too many connections from"
 				" node %d (rfd=%d)\n", node, rfd);
 			close(fd);
 			return;
 		}
-		nodes[node].cnum--;
+		nodes[i].cnum--;
 		switch (rfd) {
 			case STDIN_FILENO:
 				set_non_block(fd);
-				if (do_input_buffer_add(&inbuf, node, fd)
+				if (do_input_buffer_add(&inbuf, i, fd)
 				    == 0)
 					io_to_do++;
 				else
 					close(fd);
-				if (nodes[node].alive)
+				if (nodes[i].alive)
 					outstanding_connections--;
 				break;
 			case STDOUT_FILENO:
-				nodes[node].io[0].infd = fd;
+				nodes[i].io[0].infd = fd;
 				io_to_do++;
-				if (nodes[node].alive)
+				if (nodes[i].alive)
 					outstanding_connections--;
 				break;
 			case STDERR_FILENO:
-				nodes[node].io[1].infd = fd;
+				nodes[i].io[1].infd = fd;
 				io_to_do++;
-				if (nodes[node].alive)
+				if (nodes[i].alive)
 					outstanding_connections--;
 				break;
 			default:
@@ -647,7 +642,6 @@ void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
 	sigaddset(&blocked, SIGCHLD);
 	sigprocmask(SIG_BLOCK, &blocked, 0);
 	signal(SIGCHLD, (void (*)(int))sigchld_handler);
-	cleanup_children();
 
 	while (outstanding_connections > 0 || io_to_do > 0 ||
 	       late_connections > 0) {
@@ -719,10 +713,6 @@ void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
 		sigprocmask(SIG_UNBLOCK, &blocked, 0);
 		r = select(max + 1, rset, wset, 0, &tmo);
 		sigprocmask(SIG_BLOCK, &blocked, 0);
-		if (got_sigchld) {
-			cleanup_children();
-			got_sigchld = 0;
-		}
 		if (r > 0) {
 			if (sockfd != -1 && FD_ISSET(sockfd, rset)) {
 				int fd, sa_size;
@@ -1224,9 +1214,16 @@ int main(int argc, char *argv[])
 	}
 
 	count = node_list.size;
+	num_nodes = count;
+
+	for (i = 0; i < count; i++) 
+		max_node = node_list.node[i].node > max_node ? node_list.node[i].node : max_node;
+	map = malloc(sizeof(*map) * max_node);
 	nodes = malloc(sizeof(*nodes) * count);
-	for (i = 0; i < count; i++)
+	for (i = 0; i < count; i++) {
 		nodes[i].node = node_list.node[i].node;
+		map[nodes[i].node] = i;
+	}
 	bproc_nodeset_free(&node_list);
 
 	/* Setup a socket here if bpsh is going to act as the IO
@@ -1268,10 +1265,6 @@ int main(int argc, char *argv[])
 				(long)rlim.rlim_cur);
 		}
 	}
-
-	/* Normal mode of operation: use vexecmove to create processes and
-	 * forward I/O for them... */
-	num_nodes = count;
 
 	/* FIX ME: Add clone flags to bproc interface so we don't need to
 	 * do this horrible hack. Either that or pthread it now that
