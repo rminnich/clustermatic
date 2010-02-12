@@ -919,6 +919,12 @@ syslog(LOG_NOTICE, "ready to go");
 	if (fork() == 0) {
 		int fd;
 		int i;
+		/* note: don't worry about freeing this. We're  going to exec or exit either way */
+		char *name = malloc(strlen(argv[0]) + strlen("./") + 1);
+		name[0] = 0;
+		strcat(name, "./");
+		strcat(name, argv[0]);
+		argv[0] = name;
 		/* fix up IO */
 		/* weirdly it seems bproc forwarding current sends all the same port. But let's plan for the future. 
 		 * new socket for each port (soon)
@@ -932,9 +938,11 @@ syslog(LOG_NOTICE, "ready to go");
 			write(fd, &i, sizeof(i));
 			dup2(fd, i);
 		}
+		putenv("LD_LIBRARY_PATH=lib:lib64:usr/lib:usr/lib64");
 		syslog(LOG_NOTICE, "do_run: exec %s\n", argv[0]);
 		execv(argv[0], argv);
 		syslog(LOG_NOTICE, "do_run: exec %s FAILED\n", argv[0]);
+		exit(1);
 	}
 	
 }

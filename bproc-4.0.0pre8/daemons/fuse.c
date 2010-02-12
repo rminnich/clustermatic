@@ -294,6 +294,8 @@ initfuse(char *mtpt)
 	fusemaxwrite = getpagesize();
 	fusebufsize = 4096 + fusemaxwrite;
 
+	/* just in case ... */
+	unmountfuse(fusemtpt);
 	if ((fusefd = mountfuse(mtpt)) < 0)
 		sysfatal("mountfuse");
 

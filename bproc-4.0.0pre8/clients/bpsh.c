@@ -870,7 +870,7 @@ int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen
 			continue;
 		cur += snprintf(cur, ecmd-cur, "%s ", libs[i]); 
 	}
-	cur += snprintf(cur, ecmd-cur, " | cpio -H newc -o");
+	cur += snprintf(cur, ecmd-cur, " | cpio --dereference -H newc -o");
 fprintf(stderr, "CMD %s\n", cmd);
 	iostream = popen(cmd, "r");
 

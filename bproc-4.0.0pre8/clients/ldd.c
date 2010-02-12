@@ -58,8 +58,8 @@ struct Deplist {
 };
 
 static char *dfltpaths[] = {
-	"/lib64",
 	"/lib",
+	"/lib64",
 	"/usr/lib",
 	"/usr/lib64",
 	NULL,
