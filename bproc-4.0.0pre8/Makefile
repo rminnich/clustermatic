@@ -34,6 +34,7 @@ clean:
 
 install-clients:
 	$(MAKE) -C clients  install
+	$(MAKE) -C include install
 
 install-sys:
 	$(MAKE) -C daemons  install

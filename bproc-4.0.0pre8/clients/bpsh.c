@@ -927,7 +927,6 @@ fprintf(stderr, "CMD %s\n", cmd);
 	}
 
 	snprintf(packstart, 7, "%d", (int)(cp-packstart));
-	fprintf(stderr, "packstart %s\n", packstart);
 	cp += snprintf(cp, edata-cp, "%d", argc);
 	*cp++ = 0;
 	for(i = 0; i < argc; i++) {
@@ -958,13 +957,11 @@ fprintf(stderr, "CMD %s\n", cmd);
 
 	
 	/* now read in the cpio archive. */
-	fprintf(stderr, "cpio is at offset %d\n", (int)(cp-data));
 	amt = fread(cp, 1, edata-cp, iostream);
 	pclose(iostream);
 	cp += amt;
 	bpmaster = connectbpmaster();
 	/* do it in reasonable chunks, linux gets upset if you do too much and add in weird delays */
-printf("SEND MSG %ld\n", cp-data);
 	hdr->size = cp-data;
 	write(bpmaster, data, sizeof(*hdr));
 	for(i = sizeof(*hdr); i < cp-data; i += amt){
@@ -972,7 +969,7 @@ printf("SEND MSG %ld\n", cp-data);
 		amt = left > 4096? 4096 : left;
 		amt = write(bpmaster, data + i, amt);
 		if (amt < 0){
-			printf("fucked\n");
+			perror("Write to bpmaster failed");
 			return -1;
 		}
 	}
