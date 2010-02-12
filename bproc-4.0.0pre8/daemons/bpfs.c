@@ -16,14 +16,15 @@
 time_t statusatime = 0;
 time_t statusmtime = 0;
 
+char *bprocstate(int node, char *state);
+time_t now(void);
+
 void
 f2timeout(double f, __u64 *s, __u32 *ns)
 {
 	*s = f;
 	*ns = (f - (int)f)*1e9;
 }
-
-time_t now(void);
 
 /*
  * Statfs.  Send back information about file system.
@@ -465,6 +466,74 @@ fusereleasedir(FuseMsg *m)
 	fuserelease(m);
 }
 
+void fusesetxattr(FuseMsg *m)
+{
+	struct fuse_setxattr_in *in;
+	unsigned char *key, *val;
+	int vallen;
+	in = m->tx;
+	vallen = in->size;
+	key = (unsigned char *)(&in[1]);
+	val = &key[strlen(key)+1];
+	/* you only get one thing to set */
+	if (! strcmp(key, BPROC_STATE_XATTR)) {
+		char *cp = calloc(1, in->size + 1);
+		int node = m->hdr->nodeid & ~0x100000;
+		memcpy(cp, val, in->size);
+		bprocstate(node, cp);
+		free(cp);
+		replyfuse(m, NULL, 0);
+		return;
+	}
+	replyfuseerrno(m, ESTALE);
+}
+
+void fusegetxattr(FuseMsg *m)
+{
+	struct fuse_getxattr_in *in;
+	struct fuse_getxattr_out *out;
+	unsigned char *key;
+	char *buf, *p, *ep;
+	int n;
+
+	in = m->tx;
+	key = (unsigned char *)(&in[1]);
+	n = fusemaxwrite;
+	buf = calloc(1, n);
+	p = buf;
+	ep = buf + n;
+
+	out = (struct fuse_getxattr_out *) buf;
+	p = (char *) &out[1];
+	out->padding = p-buf;
+	/* you only get one thing to get */
+	if (! strcmp(key, BPROC_STATE_XATTR)) {
+		char *state = NULL;
+		int node = m->hdr->nodeid & ~0x100000;
+		strcpy(p, bprocstate(node, NULL));
+		out->size = strlen(p);
+		p += strlen(p);
+		replyfuse(m, buf, p-buf);
+		free(buf);
+		return;
+	}
+	replyfuseerrno(m, ESTALE);
+}
+
+void fuselistxattr(FuseMsg *m)
+{
+	struct fuse_getxattr_in *in;
+	in = m->tx;
+	replyfuseerrno(m, ESTALE);
+}
+
+void fuseremovexattr(FuseMsg *m)
+{
+	struct fuse_getxattr_in *in;
+	in = m->tx;
+	replyfuseerrno(m, ESTALE);
+}
+
 
 void (*fusehandlers[100])(FuseMsg*);
 
@@ -482,6 +551,10 @@ struct {
 	{ FUSE_RELEASE,		fuserelease },
 	{ FUSE_SETATTR,		fusesetattr },
 	{ FUSE_READ,		fuseread },
+	{ FUSE_SETXATTR,	fusesetxattr},
+	{ FUSE_GETXATTR,	fusegetxattr},
+	{ FUSE_LISTXATTR,	fuselistxattr},
+	{ FUSE_REMOVEXATTR,	fuseremovexattr},
 #if 0
 	{ FUSE_FORGET,		fuseforget },
 	/*

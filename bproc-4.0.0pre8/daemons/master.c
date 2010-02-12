@@ -182,6 +182,7 @@ struct node_t {
 	struct conn_t *running;	/* current running connection */
 
 	int status;		/* Node status */
+	char state[32];
 	struct list_head reqs;	/* Request queue to be sent to slave */
 	int flag:1;		/* generic reusable flag */
 
@@ -633,6 +634,7 @@ struct node_t *add_node(int node)
 	memset(n, 0, sizeof(*n));
 	n->id = node;
 	n->ctime = n->mtime = now();
+	strcpy(n->state, "up");
 	INIT_LIST_HEAD(&n->reqs);
 	INIT_LIST_HEAD(&n->clist);
 	return n;
@@ -715,6 +717,20 @@ bprocmode(int node, int mode)
 	if (mode > -1)
 		n->mode = mode;
 	return n->mode;
+}
+
+char *
+bprocstate(int node, char *state)
+{
+	struct node_t *n = nodep(node);
+	if (! n)
+		return NULL;
+
+	if (state) {
+		memset(n->state, 0, sizeof(n->state));
+		strncpy(n->state, state, sizeof(n->state));
+	}
+	return n->state;
 }
 
 static
