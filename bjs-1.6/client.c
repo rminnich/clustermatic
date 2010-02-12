@@ -36,93 +36,102 @@
 
 static int fd = -1;
 static struct sexp_parser_state_t *s = 0;
-int bjs_connect(char *path) {
-    struct sockaddr_un addr;
+int bjs_connect(char *path)
+{
+	struct sockaddr_un addr;
 
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-	fprintf(stderr, "socket(AF_UNIX, SOCK_STREAM): %s\n", strerror(errno));
-	return -1;
-    }
+	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+		fprintf(stderr, "socket(AF_UNIX, SOCK_STREAM): %s\n",
+			strerror(errno));
+		return -1;
+	}
 
-    addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, path);
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, path);
 
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr))) {
-	fprintf(stderr, "connect(\"%s\"): %s\n", path,  strerror(errno));
-	close(fd);
-	return -1;
-    }
-    return 0;
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr))) {
+		fprintf(stderr, "connect(\"%s\"): %s\n", path, strerror(errno));
+		close(fd);
+		return -1;
+	}
+	return 0;
 }
 
-void bjs_close(void) {
-    if (fd != -1) close(fd);
-    if (s) sexp_parser_destroy(s);
+void bjs_close(void)
+{
+	if (fd != -1)
+		close(fd);
+	if (s)
+		sexp_parser_destroy(s);
 }
 
-int bjs_send_str(const char *str) {
-    int w, len;
-    len = strlen(str);
+int bjs_send_str(const char *str)
+{
+	int w, len;
+	len = strlen(str);
 
-    /* Write it out... */
-    w = write(fd, str, len);
-    while (w > 0 && len > w)   {
-	str += w;
-	len -= w;
-
+	/* Write it out... */
 	w = write(fd, str, len);
-    }
-    if (w < 0) {
-	fprintf(stderr, "write: %s\n", strerror(errno));
-	return -1;
-    }
-    return 0;
+	while (w > 0 && len > w) {
+		str += w;
+		len -= w;
+
+		w = write(fd, str, len);
+	}
+	if (w < 0) {
+		fprintf(stderr, "write: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
-int bjs_send_sx(struct sexp_t *sx) {
-    int len;
-    char *str;
+int bjs_send_sx(struct sexp_t *sx)
+{
+	int len;
+	char *str;
 
-    /* First convert sx to a string */
-    len = sexp_strlen(sx);
-    str = alloca(len);
-    len = sexp_snprint(str, -1, sx);
+	/* First convert sx to a string */
+	len = sexp_strlen(sx);
+	str = alloca(len);
+	len = sexp_snprint(str, -1, sx);
 
-    return bjs_send_str(str);
+	return bjs_send_str(str);
 }
-
 
 #define BSIZE 4096
-int bjs_recv(struct sexp_t **sx) {
-    int used;
-    /* We have a static buffer since there might be left overs from
-     * the last read. */
-    static int  r = 0;
-    static char buf[BSIZE];
-    
-    if (!s) s = sexp_parser_new();
+int bjs_recv(struct sexp_t **sx)
+{
+	int used;
+	/* We have a static buffer since there might be left overs from
+	 * the last read. */
+	static int r = 0;
+	static char buf[BSIZE];
 
-    if (r <= 0)
-	r = read(fd, buf, BSIZE);
-    while (r > 0) {
-	used = sexp_parser_parse(buf, r, sx, s);
-	if (used == -1) {
-	    fprintf(stderr, "Parse error.\n");
-	    return -1;
+	if (!s)
+		s = sexp_parser_new();
+
+	if (r <= 0)
+		r = read(fd, buf, BSIZE);
+	while (r > 0) {
+		used = sexp_parser_parse(buf, r, sx, s);
+		if (used == -1) {
+			fprintf(stderr, "Parse error.\n");
+			return -1;
+		}
+		/* Move remaining data down */
+		memmove(buf, buf + used, r - used);
+		r -= used;
+
+		if (*sx)
+			return 0;
+
+		if (r == 0)
+			r = read(fd, buf, BSIZE);
 	}
-	/* Move remaining data down */
-	memmove(buf, buf+used, r - used);
-	r -= used;
-
-	if (*sx) return 0;
-
-	if (r == 0) r = read(fd, buf, BSIZE);
-    }
-    if (r == -1)
-	fprintf(stderr, "read: %s\n", strerror(errno));
-    return -1;
+	if (r == -1)
+		fprintf(stderr, "read: %s\n", strerror(errno));
+	return -1;
 }
-
 
 /*
  * Local variables:

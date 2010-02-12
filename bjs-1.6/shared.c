@@ -34,99 +34,107 @@
 #include <bjs.h>
 
 static
-int shared_submit(struct bjs_pool_t *p, struct bjs_job_t *j) {
-    /* Anything is ok in this pool */
-    list_add_tail(&j->plist, &p->jobs);
-    return 0;
+int shared_submit(struct bjs_pool_t *p, struct bjs_job_t *j)
+{
+	/* Anything is ok in this pool */
+	list_add_tail(&j->plist, &p->jobs);
+	return 0;
 }
 
 static
-int shared_remove(struct bjs_pool_t *p, struct bjs_job_t *j) {
-    /* Perhaps the scheduler should do this?  Probably not since we're
-     * involved in adding this to the queue ourselves.
-     */
-    list_del(&j->plist);
-    return 0;
+int shared_remove(struct bjs_pool_t *p, struct bjs_job_t *j)
+{
+	/* Perhaps the scheduler should do this?  Probably not since we're
+	 * involved in adding this to the queue ourselves.
+	 */
+	list_del(&j->plist);
+	return 0;
 }
 
 static
-struct bjs_job_t *find_first_runable(struct bjs_pool_t *p) {
-    struct list_head *l;
-    struct bjs_job_t *j;
-    for (l = p->jobs.next; l != &p->jobs; l = l->next) {
-	j = list_entry(l, struct bjs_job_t, plist);
+struct bjs_job_t *find_first_runable(struct bjs_pool_t *p)
+{
+	struct list_head *l;
+	struct bjs_job_t *j;
+	for (l = p->jobs.next; l != &p->jobs; l = l->next) {
+		j = list_entry(l, struct bjs_job_t, plist);
 
-	/* Check basic requirements */
-	if (!bjs_job_runnable(j)) continue;
-	if (!bjs_job_is_running(j)) return j;
-    }
-    return 0;
+		/* Check basic requirements */
+		if (!bjs_job_runnable(j))
+			continue;
+		if (!bjs_job_is_running(j))
+			return j;
+	}
+	return 0;
 }
 
 struct jc_t {
-    int node;
-    int count;
+	int node;
+	int count;
 };
 
 static
-int sort_compare(struct jc_t *a, struct jc_t  *b) {
-    return a->count > b->count;
+int sort_compare(struct jc_t *a, struct jc_t *b)
+{
+	return a->count > b->count;
 }
 
 static
-int shared_schedule(struct bjs_pool_t *p) {
-    int i, node_count;
-    struct bjs_job_t *j;
-    struct bjs_node_t *node;
-    struct list_head *l;
-    int reqd_nodes;
-    int idx;
-    struct jc_t *job_counts;
+int shared_schedule(struct bjs_pool_t *p)
+{
+	int i, node_count;
+	struct bjs_job_t *j;
+	struct bjs_node_t *node;
+	struct list_head *l;
+	int reqd_nodes;
+	int idx;
+	struct jc_t *job_counts;
 
-    /* Check this early so we don't go through a lot of work if we
-     * have nothing to do. */
-    j = find_first_runable(p);
-    if (!j) return 0;
-
-    /* Figure out how many jobs I have per node */
-    job_counts = alloca(sizeof(*job_counts) * p->nnodes);
-    for (i=0; i < p->nnodes; i++) {
-	job_counts[node_count].node  = node->node;
-	job_counts[node_count].count = 0;
-
-	if (bjs_node_up(p->nodes[i])) {
-	    node = bjs_get_node(p->nodes[i]);
-	    for (l = node->jobs.next; l!=&node->jobs; l = l->next)
-		job_counts[node_count].count++;
-	    node_count++;
-	}
-    }
-    /* Sort it so I can go for the least loaded nodes... */
-    qsort(job_counts, node_count, sizeof(*job_counts),
-	  (int(*)(const void*,const void*))sort_compare);
-
-    /* Start scheduling jobs */
-    idx = 0;
-    while (j) {
-	reqd_nodes = strtol(bjs_job_req(j, "nodes", "1"), 0, 0);
-	
-	/* Allocate nodes to this job and start it */
-	for (i=0; i < reqd_nodes; i++) {
-	    bjs_node_allocate(j, job_counts[idx].node, 0);
-	    idx = (idx+1) % node_count;
-	}
-	bjs_start_job(j);
-	
+	/* Check this early so we don't go through a lot of work if we
+	 * have nothing to do. */
 	j = find_first_runable(p);
-    }
-    return 1;
+	if (!j)
+		return 0;
+
+	/* Figure out how many jobs I have per node */
+	job_counts = alloca(sizeof(*job_counts) * p->nnodes);
+	for (i = 0; i < p->nnodes; i++) {
+		job_counts[node_count].node = node->node;
+		job_counts[node_count].count = 0;
+
+		if (bjs_node_up(p->nodes[i])) {
+			node = bjs_get_node(p->nodes[i]);
+			for (l = node->jobs.next; l != &node->jobs; l = l->next)
+				job_counts[node_count].count++;
+			node_count++;
+		}
+	}
+	/* Sort it so I can go for the least loaded nodes... */
+	qsort(job_counts, node_count, sizeof(*job_counts),
+	      (int (*)(const void *, const void *))sort_compare);
+
+	/* Start scheduling jobs */
+	idx = 0;
+	while (j) {
+		reqd_nodes = strtol(bjs_job_req(j, "nodes", "1"), 0, 0);
+
+		/* Allocate nodes to this job and start it */
+		for (i = 0; i < reqd_nodes; i++) {
+			bjs_node_allocate(j, job_counts[idx].node, 0);
+			idx = (idx + 1) % node_count;
+		}
+		bjs_start_job(j);
+
+		j = find_first_runable(p);
+	}
+	return 1;
 }
 
 struct policy_ops_t policy = {
-    name     : "shared",
-    submit   : shared_submit,
-    remove   : shared_remove,
-    schedule : shared_schedule
+      name:"shared",
+      submit:shared_submit,
+      remove:shared_remove,
+      schedule:shared_schedule
 };
 
 /*

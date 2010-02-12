@@ -33,90 +33,95 @@
 enum actions { NONE, REMOVE };
 
 static
-void do_remove(int argc, char *argv[]) {
-    int i;
-    struct sexp_t *sx;
+void do_remove(int argc, char *argv[])
+{
+	int i;
+	struct sexp_t *sx;
 
-    /* Create the request */
-    sx = sexp_create_list("remove", NULL);
-    for (i=optind; i < argc; i++) {
-	sexp_append_sx(sx, sexp_create(argv[i]));
-    }
-    bjs_send_sx(sx);
-
-    /* Read the responses */
-    for (i=optind; i < argc; i++) {
-	if (bjs_recv(&sx) == -1) {
-	    fprintf(stderr, "Failed to read a response from BJS.\n");
-	    exit(1);
+	/* Create the request */
+	sx = sexp_create_list("remove", NULL);
+	for (i = optind; i < argc; i++) {
+		sexp_append_sx(sx, sexp_create(argv[i]));
 	}
-	
-	printf("%s: ", argv[i]);
-	sexp_print(stdout, sx);
-	printf("\n");
-    }
+	bjs_send_sx(sx);
+
+	/* Read the responses */
+	for (i = optind; i < argc; i++) {
+		if (bjs_recv(&sx) == -1) {
+			fprintf(stderr,
+				"Failed to read a response from BJS.\n");
+			exit(1);
+		}
+
+		printf("%s: ", argv[i]);
+		sexp_print(stdout, sx);
+		printf("\n");
+	}
 }
 
 static
-void Usage(char *arg0) {
-    printf(
-"Usage: %s -h\n"
-"       %s -V\n"
-"       %s -r id id id ...\n"
-"       -h                 Display this message and exit.\n"
-"       -V                 Display version information and exit.\n"
-"       -r,--remove        Remove jobs from the system.  If the job is\n"
-"                          currently running, removing it will kill the job.\n"
-"\n"
-"       --socket path      Connect to bjs via path.\n"
-,arg0,arg0,arg0);
+void Usage(char *arg0)
+{
+	printf("Usage: %s -h\n"
+	       "       %s -V\n"
+	       "       %s -r id id id ...\n"
+	       "       -h                 Display this message and exit.\n"
+	       "       -V                 Display version information and exit.\n"
+	       "       -r,--remove        Remove jobs from the system.  If the job is\n"
+	       "                          currently running, removing it will kill the job.\n"
+	       "\n"
+	       "       --socket path      Connect to bjs via path.\n", arg0,
+	       arg0, arg0);
 }
 
-int main(int argc, char *argv[]) {
-    int c;
-    char *bjs_path;
-    enum actions action = NONE;
+int main(int argc, char *argv[])
+{
+	int c;
+	char *bjs_path;
+	enum actions action = NONE;
 
-    struct option longopts[] = { 
-	{"help",   0, 0, 'h'},
-	{"socket", 1, 0, 1},
-	{"remove", 0, 0, 'r'},
-	{0,0,0,0}
-    };
+	struct option longopts[] = {
+		{"help", 0, 0, 'h'},
+		{"socket", 1, 0, 1},
+		{"remove", 0, 0, 'r'},
+		{0, 0, 0, 0}
+	};
 
-    bjs_path = getenv("BJS_SOCKET");
-    if (!bjs_path) bjs_path = DEFAULT_SOCKET_PATH;
+	bjs_path = getenv("BJS_SOCKET");
+	if (!bjs_path)
+		bjs_path = DEFAULT_SOCKET_PATH;
 
-    while ((c=getopt_long(argc, argv, "hVr", longopts, 0)) != -1) {
-	switch(c) {
-	case 'h':
-	    Usage(argv[0]);
-	    exit(0);
-	case 'V':
-	    printf("%s version %s\n", argv[0], PACKAGE_VERSION);
-	    exit(0);
-	case 'r':
-	    action = REMOVE;
-	    break;
-	default:
-	    exit(1);
+	while ((c = getopt_long(argc, argv, "hVr", longopts, 0)) != -1) {
+		switch (c) {
+		case 'h':
+			Usage(argv[0]);
+			exit(0);
+		case 'V':
+			printf("%s version %s\n", argv[0], PACKAGE_VERSION);
+			exit(0);
+		case 'r':
+			action = REMOVE;
+			break;
+		default:
+			exit(1);
+		}
 	}
-    }
 
-    if (bjs_connect(bjs_path)) {
-	fprintf(stderr, "Failed to connect to scheduler.\nIs bjs not running"
-		" or is %s the wrong socket path?\n", bjs_path);
-	exit(1);
-    }
+	if (bjs_connect(bjs_path)) {
+		fprintf(stderr,
+			"Failed to connect to scheduler.\nIs bjs not running"
+			" or is %s the wrong socket path?\n", bjs_path);
+		exit(1);
+	}
 
-    switch(action) {
-    case NONE:
-	break;
-    case REMOVE:
-	do_remove(argc, argv);
-	break;
-    }
-    return 0;
+	switch (action) {
+	case NONE:
+		break;
+	case REMOVE:
+		do_remove(argc, argv);
+		break;
+	}
+	return 0;
 }
 
 /*

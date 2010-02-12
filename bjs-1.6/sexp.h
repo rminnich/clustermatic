@@ -33,11 +33,11 @@
 
 typedef enum { SEXP_VALUE, SEXP_LIST } sexp_elt_t;
 struct sexp_t {
-    sexp_elt_t ty;
-    struct sexp_t *list;
-    struct sexp_t *next;
-    char  val[0];
-    //char  val[MAX_SEXPR_ATOM_SIZE];
+	sexp_elt_t ty;
+	struct sexp_t *list;
+	struct sexp_t *next;
+	char val[0];
+	//char  val[MAX_SEXPR_ATOM_SIZE];
 };
 typedef struct sexp_t sexpr_t;
 typedef struct sexp_t sexp_t;
@@ -50,43 +50,45 @@ struct sexp_parser_state_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern void sexp_free(struct sexp_t *);
+	extern void sexp_free(struct sexp_t *);
 
-extern struct sexp_parser_state_t * sexp_parser_new(void);
-extern void sexp_parser_reset(struct sexp_parser_state_t *);
-extern void sexp_parser_destroy(struct sexp_parser_state_t *s);
-extern void sexp_parser_limit(struct sexp_parser_state_t *s, long bytes);
+	extern struct sexp_parser_state_t *sexp_parser_new(void);
+	extern void sexp_parser_reset(struct sexp_parser_state_t *);
+	extern void sexp_parser_destroy(struct sexp_parser_state_t *s);
+	extern void sexp_parser_limit(struct sexp_parser_state_t *s,
+				      long bytes);
 
-extern int  sexp_parser_parse(const char *str_, int len,
-			      struct sexp_t **sx_out,
-			      struct sexp_parser_state_t *s);
+	extern int sexp_parser_parse(const char *str_, int len,
+				     struct sexp_t **sx_out,
+				     struct sexp_parser_state_t *s);
 
-extern struct sexp_t *sexp_find_list(struct sexp_t *sx, ...);
+	extern struct sexp_t *sexp_find_list(struct sexp_t *sx, ...);
 /* XXX This really requires stdio... gross */
 
 /*--- Utility functions for building sexps -------------------------*/
-extern struct sexp_t *sexp_create(const char *val);
-extern struct sexp_t *sexp_create_list(const char *str1, ...);
-extern struct sexp_t *sexp_create_list_v(char **strs);
-extern struct sexp_t *sexp_concat(struct sexp_t *sx1, struct sexp_t *sx2);
-extern void           sexp_append_sx(struct sexp_t *sx, struct sexp_t *sx2);
-extern struct sexp_t *sexp_append_atom(struct sexp_t *sx, const char *val);
-extern struct sexp_t *sexp_copy(struct sexp_t *sx);
-extern struct sexp_t *sexp_copy_list(struct sexp_t *sx);
-extern struct sexp_t *sexp_nth(struct sexp_t *sx, int n);
-extern int            sexp_length(struct sexp_t *sx);
+	extern struct sexp_t *sexp_create(const char *val);
+	extern struct sexp_t *sexp_create_list(const char *str1, ...);
+	extern struct sexp_t *sexp_create_list_v(char **strs);
+	extern struct sexp_t *sexp_concat(struct sexp_t *sx1,
+					  struct sexp_t *sx2);
+	extern void sexp_append_sx(struct sexp_t *sx, struct sexp_t *sx2);
+	extern struct sexp_t *sexp_append_atom(struct sexp_t *sx,
+					       const char *val);
+	extern struct sexp_t *sexp_copy(struct sexp_t *sx);
+	extern struct sexp_t *sexp_copy_list(struct sexp_t *sx);
+	extern struct sexp_t *sexp_nth(struct sexp_t *sx, int n);
+	extern int sexp_length(struct sexp_t *sx);
 
 /* printing utilities */
-extern int   sexp_snprint(char *str_, int len, struct sexp_t *sx);
-extern int   sexp_sprint(char *str_, struct sexp_t *sx);
-extern int   sexp_strlen(struct sexp_t *sx);
-extern void  sexp_print(FILE *f, struct sexp_t *sx);
-extern char *sexp_string(struct sexp_t *sx);
+	extern int sexp_snprint(char *str_, int len, struct sexp_t *sx);
+	extern int sexp_sprint(char *str_, struct sexp_t *sx);
+	extern int sexp_strlen(struct sexp_t *sx);
+	extern void sexp_print(FILE * f, struct sexp_t *sx);
+	extern char *sexp_string(struct sexp_t *sx);
 #ifdef __cplusplus
 }
 #endif
 #endif
-
 /*
  * Local variables:
  * c-basic-offset: 4
