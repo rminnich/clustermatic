@@ -556,16 +556,20 @@ static
 void forward_io_new_fd(int fd)
 {
 	int rfd, node;
+	int i;
 	if (read(fd, &node, sizeof(node)) != sizeof(node) || 
 		read(fd, &rfd, sizeof(rfd)) != sizeof(rfd)) {
 		fprintf(stderr, "bpsh: failed to read node id or rfd"
 			" from IO connection.\n");
 		close(fd);
 	} else {
-
-		if (node >= num_nodes) {
+        	for (i = 0; i < num_nodes; i++)
+			if (nodes[i].node == node)
+				break;
+		
+		if (i >= num_nodes) {
 			fprintf(stderr,
-				"Node ID is too large %d", node);
+				"Node ID %d not found ", node);
 			close(fd);
 			return;
 		}

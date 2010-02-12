@@ -43,6 +43,7 @@
 #include <syslog.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -133,6 +134,9 @@ static long job_id = 0;		/* sequence number for job IDs */
 
 /* Global vars also for use by the policy modules */
 int verbose = 0;
+
+/* last time we updated -- we do it at least every 15 seconds. */
+time_t lastupdate = 0;
 
 /* Internal list of nodes which includes  */
 int bjs_nnodes = 0;
@@ -2350,6 +2354,14 @@ struct bjs_node_t *bjs_get_node(int node_id)
 	return bjs_node_idx[node_id];
 }
 
+time_t now(void)
+{
+	struct timeval t;
+	gettimeofday(&t, NULL);
+	return t.tv_sec;
+}
+
+
 /* This routine updates the internal node list data structures when
  * there's a machine state change in the system. */
 static
@@ -2372,7 +2384,7 @@ int update_machine_status(int status_fd)
 		syslog(LOG_ERR, "bproc_nodelist: fail");
 		return -1;
 	}
-
+	lastupdate = now();
 	/* BIG PRESUMPTION - nodes which are not up aren't getting
 	 * re-numbered.  We basically have no reasonable mechanism for
 	 * detecting that.  That should also be extremely rare. */
@@ -2603,8 +2615,6 @@ int main(int argc, char *argv[])
 		syslog(LOG_ERR, "bproc_notifier: %s", strerror(errno));
 		exit(1);
 	}
-	set_non_block(bproc_notify_fd);
-
 	/* Load configuration */
 	if (update_machine_status(bproc_notify_fd) == -1) {
 		syslog(LOG_ERR, "Failed to read machine status.");
@@ -2655,11 +2665,8 @@ int main(int argc, char *argv[])
 
 		FD_ZERO(&rset);
 		FD_ZERO(&wset);
-		FD_SET(bproc_notify_fd, &rset);
-		maxfd = bproc_notify_fd;
-
-		/* A long time */
-		tmo.tv_sec = 9999999;	/* a LONG time */
+		/* we can't poll a FUSE file descriptor. So ... */
+		tmo.tv_sec = 15;	/* we poll the notifier fd every 15 seconds.  */
 		tmo.tv_usec = 0;
 
 		if (nclients < DEFAULT_MAX_CLIENTS) {
@@ -2700,10 +2707,10 @@ int main(int argc, char *argv[])
 
 		if (r > 0) {
 			/* Check for machine status changes */
-			if (FD_ISSET(bproc_notify_fd, &rset)) {
+			if ((now()-lastupdate) > 15) {
 				if (verbose)
 					syslog(LOG_INFO,
-					       "BProc machine status change.");
+					       "Check BProc machine status change.");
 				chng = update_machine_status(bproc_notify_fd);
 				if (chng) {
 					if (verbose)

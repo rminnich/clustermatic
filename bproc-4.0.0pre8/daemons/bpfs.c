@@ -266,7 +266,7 @@ fusesetattr(FuseMsg *m)
 	}
 
 	if (in->valid&FATTR_MODE){
-		if ((in->mode & (S_IFREG|0666)) != in->mode) {
+		if ((in->mode & (S_IFREG|0777)) != in->mode) {
 			replyfuseerrno(m, EPERM);
 			return;
 		}
@@ -485,7 +485,7 @@ void fusesetxattr(FuseMsg *m)
 		replyfuse(m, NULL, 0);
 		return;
 	}
-	replyfuseerrno(m, ESTALE);
+	replyfuseerrno(m, EEXIST);
 }
 
 void fusegetxattr(FuseMsg *m)
@@ -517,7 +517,8 @@ void fusegetxattr(FuseMsg *m)
 		free(buf);
 		return;
 	}
-	replyfuseerrno(m, ESTALE);
+	fprintf(stderr, "GETXATTR failed! %s\n", key);
+	replyfuseerrno(m, EEXIST);
 }
 
 void fuselistxattr(FuseMsg *m)
