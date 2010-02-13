@@ -362,7 +362,7 @@ struct bproc_message_hdr_t {
 	long result;
 };
 
-#define BPROC_MAX_MESSAGE_SIZE (2048*1024)
+#define BPROC_MAX_MESSAGE_SIZE (8192*1024)
 
 /* bproc_null_msg_t - for messages with no extra data */
 struct bproc_null_msg_t {

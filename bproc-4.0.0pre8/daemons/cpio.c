@@ -46,6 +46,7 @@ int cpio(void *buf, size_t len, const char *prepend_string) {
 		syslog(LOG_NOTICE, "Write filename %s\n", archive_entry_pathname(entry));
 		r = archive_write_header(arch_write, entry);
 		if (r != ARCHIVE_OK) {
+			syslog(LOG_NOTICE, "Write filename %s, archive_write_header failed", archive_entry_pathname(entry));
 			write(2, archive_error_string(arch_read), strlen(archive_error_string(arch_read)));
 		}
 		else {
@@ -59,12 +60,13 @@ int cpio(void *buf, size_t len, const char *prepend_string) {
 					break;
 				}
 				if (r != ARCHIVE_OK) {
+					syslog(LOG_NOTICE, "%s", archive_error_string(arch_read));
 					return -1;
 				}
 
 				r = archive_write_data_block(arch_write, buff, size, offset);
 				if (r != ARCHIVE_OK) {
-					write(2, archive_error_string(arch_read), strlen(archive_error_string(arch_read)));
+					syslog(LOG_NOTICE, "%s", archive_error_string(arch_write));
 					return -1;
 				}
 			}

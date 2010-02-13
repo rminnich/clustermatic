@@ -1946,7 +1946,7 @@ int accept_new_slave(struct interface_t *ifc)
 					       conf.nodes[i].id);
 				slave_new_connection(&conf.nodes[i], ifc,
 						     &remote, slavefd);
-				upate_bpfs();
+				//upate_bpfs();
 				return 0;
 			}
 		}
@@ -3158,7 +3158,7 @@ int main(int argc, char *argv[])
 	if (want_daemonize)
 		daemonize();
 
-	upate_bpfs();
+	//upate_bpfs();
 
 	{
 		int r;

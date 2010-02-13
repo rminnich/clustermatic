@@ -923,7 +923,10 @@ fprintf(stderr, "CMD %s\n", cmd);
 	snprintf(packstart, 7, "%d", (int)(cp-packstart));
 	cp += snprintf(cp, edata-cp, "%d", argc);
 	*cp++ = 0;
-	for(i = 0; i < argc; i++) {
+	/* use the full pathname, not argv[0] */
+	cp += snprintf(cp, edata-cp, "%s", progname);
+	*cp++ = 0;
+	for(i = 1; i < argc; i++) {
 		cp += snprintf(cp, edata-cp, "%s", argv[i]);
 		*cp++ = 0;
 	}
