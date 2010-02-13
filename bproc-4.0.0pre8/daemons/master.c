@@ -1198,25 +1198,6 @@ time_t now(void)
 }
 
 static
-void upate_bpfs(void)
-{
-	int i;
-	struct bproc_node_info_t node;
-
-	for (i = 0; i < conf.num_nodes; i++){
-		node.node = conf.nodes[i].id;
-		strncpy(node.status, "up", sizeof(node.status));
-		node.mode = 0666;
-		node.user = 0;
-		node.group = 0;
-		node.atime = now();
-		node.mtime = now();
-		memcpy(&node.addr, conf.nodes[i].addr, sizeof(&node.addr));
-	}
-
-}
-
-static
 void config_free(struct config_t *c)
 {
 	int i;
