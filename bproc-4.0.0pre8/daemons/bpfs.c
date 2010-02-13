@@ -485,7 +485,7 @@ void fusesetxattr(FuseMsg *m)
 		replyfuse(m, NULL, 0);
 		return;
 	}
-	replyfuseerrno(m, EEXIST);
+	replyfuseerrno(m, ENOENT);
 }
 
 void fusegetxattr(FuseMsg *m)
@@ -518,7 +518,7 @@ void fusegetxattr(FuseMsg *m)
 		return;
 	}
 	fprintf(stderr, "GETXATTR failed! %s\n", key);
-	replyfuseerrno(m, EEXIST);
+	replyfuseerrno(m, ENOENT);
 }
 
 void fuselistxattr(FuseMsg *m)

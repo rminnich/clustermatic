@@ -1221,10 +1221,11 @@ int main(int argc, char *argv[])
 
 	for (i = 0; i < count; i++) 
 		max_node = node_list.node[i].node > max_node ? node_list.node[i].node : max_node;
-	map = malloc(sizeof(*map) * max_node);
+	map = malloc(sizeof(*map) * (max_node + 1));
 	nodes = malloc(sizeof(*nodes) * count);
 	for (i = 0; i < count; i++) {
 		nodes[i].node = node_list.node[i].node;
+printf("Set map[%d] to %d]\n", nodes[i].node, i);
 		map[nodes[i].node] = i;
 	}
 	bproc_nodeset_free(&node_list);
