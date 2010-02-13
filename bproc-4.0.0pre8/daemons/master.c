@@ -167,6 +167,9 @@ struct conn_t {
 
 	int ooffset;
 	struct request_t *oreq;
+	/* auth stuff for clients */
+	uid_t user;
+	gid_t group;
 };
 
 struct conn_t *connections;
@@ -2285,6 +2288,14 @@ int bytesavail(int fd)
 	return ret;
 }
 
+/* don't know what magic is needed to make this not be so broken. Read the include file in Linux and weep. */
+struct ucred {
+	__u32	pid;
+	__u32	uid;
+	__u32	gid;
+};
+
+
 static
 int accept_new_client(void)
 {
@@ -2293,6 +2304,8 @@ int accept_new_client(void)
 	ev.events = EPOLLIN;
 	struct sockaddr_in remote;
 	struct conn_t *conn;
+	struct ucred ucred;
+	socklen_t size;
 
 	socklen_t remsize = sizeof(remote);
 	clientfd = accept(clientconnect, (struct sockaddr *)&remote, &remsize);
@@ -2300,6 +2313,13 @@ int accept_new_client(void)
 		if (errno == EAGAIN)
 			return 0;
 		syslog(LOG_ERR, "accept: %s", strerror(errno));
+		return -1;
+	}
+
+	/* if you can not get creds then you can not get the service. Too bad. */
+	size = sizeof(ucred);
+	if (getsockopt(clientfd, SOL_SOCKET, SO_PEERCRED, &ucred, &size) == -1) {
+		syslog(LOG_ERR, "getsockopt(SO_PEERCRED): %s", strerror(errno));
 		return -1;
 	}
 
@@ -2314,6 +2334,8 @@ int accept_new_client(void)
 	conn->state = CONN_RUNNING;
 	conn->ctime = time(0);
 	conn->raddr = remote.sin_addr;
+	conn->user = ucred.uid;
+	conn->group = ucred.gid;
 
 	/* I/O buffering */
 	INIT_LIST_HEAD(&conn->backlog);
