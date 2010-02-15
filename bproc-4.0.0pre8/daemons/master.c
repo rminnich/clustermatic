@@ -19,6 +19,41 @@
  *
  * $Id: master.c,v 1.156 2004/10/18 20:02:24 mkdist Exp $
  *-----------------------------------------------------------------------*/
+
+/* notes from Ron: 
+ * Usage of the conf and tc structs. They are the same kind of thing, But they are used at different times. 
+ * I'm having trouble with bpfs and it may be because I'm using the wrong one. 
+ * I think tc means "temporary conf" and conf is the real thing. 
+ * conf
+ * setup_listen_socket
+ * config_transfer_slaves -- as the "old" config
+ * config_update_nodes (why not tc here? )
+ * master_config --> tc is assigned to conf!
+ * find_node_by_number
+ * conn_send_conf
+ * accept_new_slave
+ * do_get_status
+ * send_pings
+ * main
+ * main io loop
+ * 
+ * tc -- note that tc is referenced here: Daemon Configuration
+ * used directly in setup_listen_socket
+ * config_interface
+ * add_node
+ * nodep (my stuff for bpfs)
+ * numnodes
+ * add_node_ip
+ * check_ip
+ * config_timesync
+ * config_privatefs
+ * master_conf_callback
+ * config_master
+ * config_transfer_slaves --> " Transfer slaves from conf to tc "
+ * config_fixup
+ * master_config
+ * conn_write_refill
+ */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -642,12 +677,14 @@ struct node_t *add_node(int node)
 	INIT_LIST_HEAD(&n->clist);
 	return n;
 }
+
+/* mainly code used to support external .c e.g. bpfs */
 static struct node_t *
 nodep(int node)
 {
 	struct node_t *n = 0;
-	if (node < tc.num_ids)
-		n = tc.node_map[node];
+	if (node < conf.num_ids)
+		n = conf.node_map[node];
 	return n;
 }
 int
