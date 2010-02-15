@@ -1573,6 +1573,8 @@ void run_node_up(struct node_t *s)
 {
 	int pid, i;
 	s->mtime = now();
+	s->user = s->group = 0;
+	s->mode = S_IFREG|0111;
 	/* no longer needed */
 	return;
 	pid = fork();
@@ -1967,7 +1969,6 @@ int accept_new_slave(struct interface_t *ifc)
 					       conf.nodes[i].id);
 				slave_new_connection(&conf.nodes[i], ifc,
 						     &remote, slavefd);
-				//upate_bpfs();
 				return 0;
 			}
 		}
@@ -3197,8 +3198,6 @@ int main(int argc, char *argv[])
 
 	if (want_daemonize)
 		daemonize();
-
-	//upate_bpfs();
 
 	{
 		int r;
