@@ -871,6 +871,8 @@ do_run(struct conn_t *c, struct request_t *req)
 	struct sockaddr_in addr;
 	char *packstart;
 	int packoff, node;
+	uid_t uid;
+	gid_t gid;
 
 	hdr = (struct bproc_message_hdr_t *)msg;
 	len = hdr->size;
@@ -880,6 +882,9 @@ do_run(struct conn_t *c, struct request_t *req)
 	packstart = cp + packoff;
 	syslog(LOG_NOTICE, "do_run: cp %p packoff %d packstart %p", cp, packoff, packstart);
 	cp += 8;
+	uid = strtoul(cp, 0, 10);
+	gid = strtoul(cp, 0, 10);
+	syslog(LOG_NOTICE, "uid %d gid %d\n", uid, gid);
 	node = strtoul(cp, 0, 10);
 syslog(LOG_NOTICE, "index @ %d i %s %d", (int)(cp-msg),cp, node);
 	cp += strlen(cp) + 1;

@@ -876,6 +876,7 @@ fprintf(stderr, "CMD %s\n", cmd);
 
 	/* format: Command (1), length(6), null(1), lines of: 
 	 * offset to argc as text
+	 * uid and gid as null-terminated strings, 9 bytes
 	 * node count as text, null, 
 	 * list of nodes (set of null-terminated strings with extra null at end)
 	 * argc text(line)
@@ -903,6 +904,10 @@ fprintf(stderr, "CMD %s\n", cmd);
 	 */
 	packstart = cp; 
 	cp += 8;
+	/* empty uid and gid, they will be ignored. */
+	cp += snprintf(cp, 9, "%08d", 0x11111111);
+	cp += snprintf(cp, 9, "%08d", 0x22222222);
+
 	/* the "NODE id" reserved space. 
 	 * Nodes use this to identify themselves to bpsh when they connect for IO
 	*/

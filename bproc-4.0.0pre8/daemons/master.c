@@ -1982,32 +1982,6 @@ int accept_new_slave(struct interface_t *ifc)
 /**------------------------------------------------------------------------
  **  Process management
  **----------------------------------------------------------------------*/
-/* Returns 1 on permission ok. */
-int do_move_permission(struct node_t *dest, struct request_t *req)
-{
-	int i;
-	struct nodeset_perm_t mp;
-	struct bproc_move_msg_t *msg;
-	struct bproc_credentials_t *creds;
-	msg = bproc_msg(req);
-
-	creds = ((void *)msg) + msg->call_creds;
-
-	/* Fill in the structure required to do a permission check... */
-	mp.node = dest->id;
-	mp.euid = creds->euid;
-	mp.egid = creds->egid;
-	mp.ngroups = creds->ngroups;
-	mp.cap_effective = creds->cap_effective;
-	/* XXX FIX ME: arbitrary group counts */
-	if (mp.ngroups > BPROC_NGROUPS)
-		mp.ngroups = 0;
-	for (i = 0; i < mp.ngroups; i++)
-		mp.groups[i] = creds->groups[i];
-
-	return 1;		//ioctl(ghostfd, BPROC_NODESET_PERM, &mp) == 0;
-}
-
 static
 void set_proc_location(struct assoc_t *a, struct node_t *loc)
 {
@@ -2457,6 +2431,8 @@ run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
 	struct bproc_message_hdr_t *hdr;
 	int i, len;
 	int maxnodes, actualnodes;
+	uid_t uid;
+	gid_t gid;
 	struct node_t **list;
 	/* unpack the request node list, and for each node, see if it is "real" */
 	/* Just use the count they pass, if there is less, that is ok */
@@ -2465,6 +2441,9 @@ run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
 	cp = msg + sizeof(*hdr);
 	/* skip packoff, we don't care */
 	cp += 8;
+	/* skip uid and gid -- don't trust them */
+	cp += strlen(cp) + 1;
+	cp += strlen(cp) + 1;
 	/* skip index */
 	cp += strlen(cp) + 1;
 	if (len < (int)(cp-msg)){
@@ -2484,6 +2463,8 @@ run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
 			free(*s);
 			return 0;
 		}
+		/* PERMISSIONS checking can go here. */
+		/* what we'll do is run on all allowed -- this avoids weird races. */
 		if (*list = find_node_by_number(strtoul(cp, 0, 10)))
 			list++, actualnodes++;
 	}
