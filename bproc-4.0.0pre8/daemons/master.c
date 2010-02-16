@@ -54,6 +54,7 @@
  * master_config
  * conn_write_refill
  */
+#define _GNU_SOURCE
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -86,7 +87,6 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <net/if.h>
-#define _GNU_SOURCE
 #include <sched.h>
 
 #include "bproc.h"
@@ -2300,14 +2300,6 @@ int bytesavail(int fd)
 	return ret;
 }
 
-/* don't know what magic is needed to make this not be so broken. Read the include file in Linux and weep. */
-struct ucred {
-	__u32	pid;
-	__u32	uid;
-	__u32	gid;
-};
-
-
 static
 int accept_new_client(void)
 {
@@ -3115,7 +3107,7 @@ int main(int argc, char *argv[])
 		{"version", 0, 0, 'V'},
 		{0, 0, 0, 0}
 	};
-	char *fusemntpoint = NULL;
+	char *fusemntpoint = "/bpfs";
 	int fusefd = -1;
 
 	while ((c =

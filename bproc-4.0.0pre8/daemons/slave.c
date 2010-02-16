@@ -890,7 +890,7 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 		int fd;
 		int i;
 		/* clean path */
-		if (mount("none", "/tmp", "tmpfs", 0, 0) != 0) {
+		if (umount("/tmp") || mount("none", "/tmp", "tmpfs", 0, 0)) {
 			syslog(LOG_ERR, "mount(\"none\", \"%s\", \"tmpfs\", 0, 0): %s",
 			       "/tmp", strerror(errno));
 			exit(1);
