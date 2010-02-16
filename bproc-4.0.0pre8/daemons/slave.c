@@ -873,61 +873,75 @@ do_run(struct conn_t *c, struct request_t *req)
 	int packoff, node;
 	uid_t uid;
 	gid_t gid;
+	int ret;
 
-	hdr = (struct bproc_message_hdr_t *)msg;
-	len = hdr->size;
-	cp = msg + sizeof(*hdr);
-	/* get the packet start. Nodes will start at 8 bytes past this point. */
-	packoff = strtoul(cp, 0, 10);
-	packstart = cp + packoff;
-	syslog(LOG_NOTICE, "do_run: cp %p packoff %d packstart %p", cp, packoff, packstart);
-	cp += 8;
-syslog(LOG_NOTICE, "cp %s", cp);
-	uid = strtoul(cp, 0, 10);
-	cp += strlen(cp) + 1;
-syslog(LOG_NOTICE, "cp %s", cp);
-	gid = strtoul(cp, 0, 10);
-	cp += strlen(cp) + 1;
-	syslog(LOG_NOTICE, "uid %d gid %d\n", uid, gid);
-	node = strtoul(cp, 0, 10);
-syslog(LOG_NOTICE, "index @ %d i %s %d", (int)(cp-msg),cp, node);
-	cp += strlen(cp) + 1;
-	syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
-	syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
-	buildarr(&cp, &nodec, &nodes);
-	cp = packstart;
-	buildarr(&cp, &argc, &argv);
-syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
-	buildarr(&cp, &envc, &env);
-	
-	/* get the flags */
-	flags = strtoul(cp, 0, 10);
-	cp += strlen(cp) + 1;
-	syslog(LOG_NOTICE, "flags %d\n", flags);
-	/* host IP and ports */
-	syslog(LOG_NOTICE, "hostip %s", inet_ntoa(addr.sin_addr));
-	cp += strlen(cp) + 1;
-	buildarr(&cp, &portc, &ports);
-	/* nodes */
-	/* now do the cpio unpack */
-	/* let's depend on having a cpio command for now. */
+
+	/* mount /tmp/whatever here in future with clone and NEWNS */
 syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 	dirname=strdup("/tmp/bproc2XXXXXX");
 	mkdtemp(dirname);
-syslog(LOG_NOTICE, "dirname %s", dirname);
-	chdir(dirname);
-	syslog(LOG_NOTICE, "chdir %s", dirname);
-	cpiolen = len - (cp - msg);
-	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
-	if (cpio(cp, cpiolen, "./") < 1) {
-		syslog(LOG_NOTICE, "do_run: cpio failed");
+
+	ret = fork();
+	if (ret < 0) {
+		syslog(LOG_NOTICE, "do_run: fork failed");
 		return;
 	}
-	/* let's run it. */
-syslog(LOG_NOTICE, "ready to go");
-	if (fork() == 0) {
+	if (ret == 0) {
 		int fd;
 		int i;
+		hdr = (struct bproc_message_hdr_t *)msg;
+		len = hdr->size;
+		cp = msg + sizeof(*hdr);
+		/* get the packet start. Nodes will start at 8 bytes past this point. */
+		packoff = strtoul(cp, 0, 10);
+		packstart = cp + packoff;
+		syslog(LOG_NOTICE, "do_run: cp %p packoff %d packstart %p", cp, packoff, packstart);
+		cp += 8;
+syslog(LOG_NOTICE, "cp %s", cp);
+		uid = strtoul(cp, 0, 10);
+		cp += strlen(cp) + 1;
+syslog(LOG_NOTICE, "cp %s", cp);
+		gid = strtoul(cp, 0, 10);
+		cp += strlen(cp) + 1;
+		syslog(LOG_NOTICE, "uid %d gid %d\n", uid, gid);
+		node = strtoul(cp, 0, 10);
+syslog(LOG_NOTICE, "index @ %d i %s %d", (int)(cp-msg),cp, node);
+		cp += strlen(cp) + 1;
+		syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
+		syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
+		buildarr(&cp, &nodec, &nodes);
+		cp = packstart;
+		buildarr(&cp, &argc, &argv);
+syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
+		buildarr(&cp, &envc, &env);
+		
+		/* get the flags */
+		flags = strtoul(cp, 0, 10);
+		cp += strlen(cp) + 1;
+		syslog(LOG_NOTICE, "flags %d\n", flags);
+		/* host IP and ports */
+		syslog(LOG_NOTICE, "hostip %s", inet_ntoa(addr.sin_addr));
+		cp += strlen(cp) + 1;
+		buildarr(&cp, &portc, &ports);
+		/* nodes */
+		/* now do the cpio unpack */
+		/* let's depend on having a cpio command for now. */
+		/* fix the tmp directory permission while we are still root*/
+		chmod(dirname, 0700);
+		chown(dirname, uid, gid);
+		setgid(gid);
+		setuid(uid);
+syslog(LOG_NOTICE, "dirname %s", dirname);
+		chdir(dirname);
+		syslog(LOG_NOTICE, "chdir %s", dirname);
+		cpiolen = len - (cp - msg);
+		syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
+		if (cpio(cp, cpiolen, "./") < 1) {
+			syslog(LOG_NOTICE, "do_run: cpio failed");
+			return;
+		}
+		/* let's run it. */
+syslog(LOG_NOTICE, "ready to go");
 		/* note: don't worry about freeing this. We're  going to exec or exit either way */
 		char *name = malloc(strlen(argv[0]) + strlen("./") + 1);
 		name[0] = 0;
@@ -953,6 +967,8 @@ syslog(LOG_NOTICE, "ready to go");
 		syslog(LOG_NOTICE, "do_run: exec %s FAILED\n", argv[0]);
 		exit(1);
 	}
+
+	/* what's a parent to do? */
 	
 }
 
