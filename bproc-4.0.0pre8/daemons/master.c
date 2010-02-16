@@ -2431,7 +2431,7 @@ run_ok(struct node_t *s, uid_t uid, gid_t gid)
 }
 /* be sensitive to possible bad messages from clients. */
 int
-run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
+run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s, int *max)
 {
 	char *msg = bproc_msg(req), *cp;
 	struct bproc_message_hdr_t *hdr;
@@ -2458,6 +2458,7 @@ run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
 		return 0;
 	}
 	maxnodes = strtoul(cp, 0, 10);
+	*max = maxnodes;
 	/* is it sane? This simple test captures much badness. It also ensures we can at least start on the path. */
 	if (maxnodes > len)
 		return 0;
@@ -2524,8 +2525,13 @@ int client_msg_in(struct conn_t *c, struct request_t *req)
 		struct node_t **s;
 		int nodecount;
 		struct request_t *nreq;
+		int maxnode;
 
-		nodecount = run_nodes(c, req, &s);
+		/* TODO: connect to the process's open TCP sockets and report errors via that way. We don't 
+		 * ack or do any such thing right now. The logical place is via the io forwarding path since slaves
+		 * are goint to use that path anyway
+		 */
+		nodecount = run_nodes(c, req, &s, &maxnode);
 
 		/* don't rewrite header (yet) */
 		for(i = 0; i < nodecount-1; i++) {
