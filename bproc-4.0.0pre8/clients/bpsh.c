@@ -84,6 +84,8 @@ static int num_nodes = 0, max_node = -1;
 static struct node_io *nodes;
 static int num_files;
 static int *map = NULL;
+int bpmaster = -1;	/* connection to bpmaster */
+
 /*static          int no_io = 0;*/
 
 /* The kernel rounds the size of our fd_set up so we should do it as well. */
@@ -654,6 +656,13 @@ void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
 				max = sockfd;
 		}
 
+		/* not yet. But at some point we're going to take responses back */
+		if ((bpmaster != -1) && 0) {
+			FD_SET(bpmaster, rset);
+			if (max < bpmaster)
+				max = bpmaster;
+		}
+
 		/* Deal with the input buffer */
 		if (inbuf.infd != -1 && inbuf.bytes < buffer_size) {
 			FD_SET(inbuf.infd, rset);
@@ -729,6 +738,10 @@ void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
 					close(sockfd);
 					sockfd = -1;
 				}
+			}
+
+			/* any messages from bpmaster? */
+			if (bpmaster != -1 && FD_ISSET(bpmaster, rset)) {
 			}
 
 			/* Do input fds */
@@ -850,7 +863,6 @@ int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen
 	unsigned char *data, *cp, *edata, *count;
 	int amt;
 	int envc;
-	int bpmaster;
 	int datalen = 2*1048576;
 	static char cmd[4096], *ecmd = &cmd[4095], *cur;
 	struct bproc_message_hdr_t *hdr;
