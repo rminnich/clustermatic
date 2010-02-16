@@ -2428,11 +2428,11 @@ run_ok(struct node_t *s, uid_t uid, gid_t gid)
 	/* root: always */
 	if (uid == 0)
 		return 1;
-	if ((s->user == uid) && (s->mode & S_IXUSR))
+	if ((s->user == uid) & (s->mode & S_IXUSR))
 		return 1;
-	if ((s->group == gid) && (s->mode & S_IXGRP))
+	if ((s->group == gid) & (s->mode & S_IXGRP))
 		return 1;
-	if (s->mode && S_IXOTH)
+	if (s->mode & S_IXOTH)
 		return 1;
 
 	return 0;
@@ -2483,7 +2483,7 @@ run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
 		node = find_node_by_number(strtoul(cp, 0, 10));
 		if (! node)
 			continue;
-		if (! run_ok(node, uid, gid))
+		if (! run_ok(node, c->user, c->group))
 			continue;
 		/* what we'll do is run on all allowed -- this avoids weird races. */
 		*list++ = node;
