@@ -2420,9 +2420,9 @@ run_ok(struct node_t *s, uid_t uid, gid_t gid)
 	/* root: always */
 	if (uid == 0)
 		return 1;
-	if ((s->user == uid) & (s->mode & S_IXUSR))
+	if ((s->user == uid) && (s->mode & S_IXUSR))
 		return 1;
-	if ((s->group == gid) & (s->mode & S_IXGRP))
+	if ((s->group == gid) && (s->mode & S_IXGRP))
 		return 1;
 	if (s->mode & S_IXOTH)
 		return 1;
