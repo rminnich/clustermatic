@@ -2437,7 +2437,7 @@ run_ok(struct node_t *s, uid_t uid, gid_t gid)
 
 	return 0;
 }
-/* be sensitivre to possible bad messages from clients. */
+/* be sensitive to possible bad messages from clients. */
 int
 run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
 {

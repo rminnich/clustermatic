@@ -881,7 +881,7 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 	dirname=strdup("/tmp/bproc2XXXXXX");
 	mkdtemp(dirname);
 
-	ret = fork();
+	ret = syscall(__NR_clone, CLONE_NEWNS, NULL, NULL, NULL);
 	if (ret < 0) {
 		syslog(LOG_NOTICE, "do_run: fork failed");
 		return;
@@ -889,6 +889,13 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 	if (ret == 0) {
 		int fd;
 		int i;
+		/* clean path */
+		if (mount("none", "/tmp", "tmpfs", 0, 0) != 0) {
+			syslog(LOG_ERR, "mount(\"none\", \"%s\", \"tmpfs\", 0, 0): %s",
+			       "/tmp", strerror(errno));
+			exit(1);
+		}
+
 		hdr = (struct bproc_message_hdr_t *)msg;
 		len = hdr->size;
 		cp = msg + sizeof(*hdr);
