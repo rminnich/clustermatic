@@ -876,11 +876,6 @@ do_run(struct conn_t *c, struct request_t *req)
 	int ret;
 
 
-	/* mount /tmp/whatever here in future with clone and NEWNS */
-syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
-	dirname=strdup("/tmp/bproc2XXXXXX");
-	mkdtemp(dirname);
-
 	ret = syscall(__NR_clone, CLONE_NEWNS, NULL, NULL, NULL);
 	if (ret < 0) {
 		syslog(LOG_NOTICE, "do_run: fork failed");
@@ -896,6 +891,8 @@ syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
 			exit(1);
 		}
 
+		dirname=strdup("/tmp/bproc2XXXXXX");
+		mkdtemp(dirname);
 		hdr = (struct bproc_message_hdr_t *)msg;
 		len = hdr->size;
 		cp = msg + sizeof(*hdr);
@@ -917,6 +914,8 @@ syslog(LOG_NOTICE, "index @ %d i %s %d", (int)(cp-msg),cp, node);
 		syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
 		syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
 		buildarr(&cp, &nodec, &nodes);
+		syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
+
 		cp = packstart;
 		buildarr(&cp, &argc, &argv);
 syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
