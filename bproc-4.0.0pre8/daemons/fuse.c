@@ -957,5 +957,5 @@ void unmountfuse(char *mtpt)
 #endif
 		_exit(1);
 	}
-	waitpid();
+	wait();
 }
