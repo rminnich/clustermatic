@@ -2485,8 +2485,12 @@ void set_index(struct request_t *req, int i)
 	struct bproc_message_hdr_t *hdr;
 	hdr = (struct bproc_message_hdr_t *)msg;
 	cp = msg + sizeof(*hdr);
-	/* skip the packet start */
+	/* skip the packet start info */
 	cp += 8;
+	/* skip the uid and gid -- btw -- this way of doing RPCs sucks. My bad. */
+	cp += strlen(cp) + 1;
+	cp += strlen(cp) + 1;
+	
 	(void)snprintf(cp, 8, "%07d", i);
 }
 /* "ghost" is a little dated in this function name. */

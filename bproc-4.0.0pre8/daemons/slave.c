@@ -882,8 +882,12 @@ do_run(struct conn_t *c, struct request_t *req)
 	packstart = cp + packoff;
 	syslog(LOG_NOTICE, "do_run: cp %p packoff %d packstart %p", cp, packoff, packstart);
 	cp += 8;
+syslog(LOG_NOTICE, "cp %s", cp);
 	uid = strtoul(cp, 0, 10);
+	cp += strlen(cp) + 1;
+syslog(LOG_NOTICE, "cp %s", cp);
 	gid = strtoul(cp, 0, 10);
+	cp += strlen(cp) + 1;
 	syslog(LOG_NOTICE, "uid %d gid %d\n", uid, gid);
 	node = strtoul(cp, 0, 10);
 syslog(LOG_NOTICE, "index @ %d i %s %d", (int)(cp-msg),cp, node);
