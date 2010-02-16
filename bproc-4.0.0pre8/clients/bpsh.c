@@ -905,13 +905,16 @@ fprintf(stderr, "CMD %s\n", cmd);
 	packstart = cp; 
 	cp += 8;
 	/* empty uid and gid, they will be ignored. */
-	cp += snprintf(cp, 9, "%08d", 0x11111111);
-	cp += snprintf(cp, 9, "%08d", 0x22222222);
+	cp += snprintf(cp, 9, "%08d", 12345678);
+	cp++;
+	cp += snprintf(cp, 9, "%08d", 23456789);
+	cp++;
 
 	/* the "NODE id" reserved space. 
 	 * Nodes use this to identify themselves to bpsh when they connect for IO
 	*/
-	cp += snprintf(cp, 8, "%08d", 0);
+	cp += snprintf(cp, 8, "%07d", 0);
+	*cp++ = 0;
 	/* Nodes go first because the master may have to rewrite them. */
 	cp += snprintf(cp, edata-cp, "%d", num_nodes);
 	*cp++ = 0;

@@ -2441,8 +2441,10 @@ run_nodes(struct conn_t *c, struct request_t *req, struct node_t ***s)
 	cp = msg + sizeof(*hdr);
 	/* skip packoff, we don't care */
 	cp += 8;
-	/* skip uid and gid -- don't trust them */
+	/* Plug in the real uid and gid */
+	snprintf(cp, 9, "%08d", c->user);
 	cp += strlen(cp) + 1;
+	snprintf(cp, 9, "%08d", c->group);
 	cp += strlen(cp) + 1;
 	/* skip index */
 	cp += strlen(cp) + 1;
