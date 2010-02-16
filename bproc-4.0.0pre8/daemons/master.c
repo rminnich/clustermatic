@@ -705,7 +705,7 @@ bprocnodeinfo(int n, struct bproc_node_info_t *node)
 	if (! bp)
 		return -1;
 	node->node = bp->id;
-	if (node->status)
+	if (bp->mode)
 		strncpy(node->status, "up", sizeof(node->status));
 	else
 		strncpy(node->status, "down", sizeof(node->status));
