@@ -36,6 +36,8 @@ install: $(A_LIB) $(SO_LIB) $(BINS) compat_install
 	install -m 644 $(A_LIB)           $(prefix)$(libdir)
 	install -m 755 $(SO_LIB)          $(prefix)$(libdir)
 	ln -sf $(SONAME) $(prefix)$(libdir)/$(SOLINK)
+	ln -sf $(SO_LIB) $(prefix)$(libdir)/$(SOLINK)
+	ln -sf $(SO_LIB) $(prefix)$(libdir)/$(SOLINK).$(LIB_MAJ)
 #	-/sbin/ldconfig
 # Programs
 	install -s -m 755 bpsh            $(prefix)$(bindir)
