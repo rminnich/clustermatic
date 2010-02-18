@@ -250,6 +250,7 @@ int bproc_nodelist_(struct bproc_node_set_t *ns, int fd)
 	int r;
 	struct stat statbuf;
 	struct pollfd pfd;
+	unsigned char *cp;
 
 	pfd.fd = fd;
 	pfd.events = POLLIN;
@@ -274,12 +275,15 @@ int bproc_nodelist_(struct bproc_node_set_t *ns, int fd)
 	}
 
 	lseek(fd, 0, SEEK_SET);
-	r = read(fd, ns->node, statbuf.st_size);
-	if (r == -1) {
+
+	cp = (unsigned char *)ns->node;
+	while ((r = read(fd,cp, statbuf.st_size)) > 0)
+		cp += r;
+	if (r < 0) {
 		bproc_nodeset_free(ns);
 		return -1;
 	}
-	if (r != statbuf.st_size)
+	if (r < statbuf.st_size)
 		goto again;
 
 	ns->size = statbuf.st_size / sizeof(*ns->node);
