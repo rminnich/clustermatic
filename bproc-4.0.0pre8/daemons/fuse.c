@@ -936,7 +936,7 @@ int mountfuse(char *mtpt)
 
 void waitfuse(void)
 {
-	waitpid();
+	wait(NULL);
 }
 
 void unmountfuse(char *mtpt)
@@ -957,5 +957,5 @@ void unmountfuse(char *mtpt)
 #endif
 		_exit(1);
 	}
-	wait();
+	wait(NULL);
 }
