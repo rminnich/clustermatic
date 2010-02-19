@@ -245,12 +245,29 @@ int bproc_nodeinfo(int node, struct bproc_node_info_t *info)
 	return 0;
 }
 
+int
+suck_it_in(int fd, void *v, int size)
+{
+	unsigned char *cp = v;
+	int total, amt;
+	loff_t off;
+
+	for(total = 0; total < size; total += amt) {
+		off = total;
+		amt = pread(fd, cp, size, off);
+		if (amt < 0)
+			return -1;
+		if (amt == 0)
+			break;
+	}
+
+	return total;
+}
 int bproc_nodelist_(struct bproc_node_set_t *ns, int fd)
 {
 	int r;
 	struct stat statbuf;
 	struct pollfd pfd;
-	unsigned char *cp;
 
 	pfd.fd = fd;
 	pfd.events = POLLIN;
@@ -276,9 +293,7 @@ int bproc_nodelist_(struct bproc_node_set_t *ns, int fd)
 
 	lseek(fd, 0, SEEK_SET);
 
-	cp = (unsigned char *)ns->node;
-	while ((r = read(fd,cp, statbuf.st_size)) > 0)
-		cp += r;
+	r = suck_it_in(fd, ns->node, statbuf.st_size);
 	if (r < 0) {
 		bproc_nodeset_free(ns);
 		return -1;
