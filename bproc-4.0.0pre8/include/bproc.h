@@ -66,7 +66,7 @@ struct bproc_version_t {
 	char version_string[24];
 };
 
-/*--- Structs passed in and out of the kernel ----------------------*/
+/*--- Structs passed between user programs  ----------------------*/
 
 /* All BProc attributes start with this */
 #define BPROC_XATTR_PREFIX   "bproc."
@@ -533,6 +533,15 @@ struct bproc_wait_resp_t {
 	int nswap;
 };
 
+/* client messages */
+
+struct bproc_nodestatus_resp_t {
+	struct bproc_message_hdr_t hdr;
+
+	int numnodes;
+	struct bproc_node_info_t node[0];
+};
+
 /*--------------------------------------------------------------------
  *  slave daemon control messages
  */
@@ -760,7 +769,8 @@ extern "C" {
 	int bprocuid(int node, int uid);
 	int bprocgid(int node, int gid);
 	int bprocmode(int node, int mode);
-
+int connectbpmaster(void);
+int bproc_nodelist_uds(struct bproc_node_set_t *ns, int fd);
 #ifdef __cplusplus
 }
 #endif

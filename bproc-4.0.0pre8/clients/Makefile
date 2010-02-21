@@ -16,7 +16,7 @@ SONAME=$(SOLINK).$(LIB_MAJ)
 SO_LIB=$(SONAME).$(LIB_MIN).$(LIB_PATCH)
 A_LIB=libbproc.a
 
-LIBOBJS:=bproc.o
+LIBOBJS:=bproc.o msg.o
 # This crud is so that we can work on systems whose C libraries.  The
 # build rules are basically the same except that we need use the
 # headers from our linux source tree to the syscall number in this

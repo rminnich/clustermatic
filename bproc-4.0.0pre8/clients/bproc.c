@@ -30,6 +30,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 
 #include <dirent.h>
 #include <netinet/in.h>
@@ -250,11 +251,9 @@ suck_it_in(int fd, void *v, int size)
 {
 	unsigned char *cp = v;
 	int total, amt;
-	loff_t off;
 
 	for(total = 0; total < size; total += amt) {
-		off = total;
-		amt = pread(fd, cp, size, off);
+		amt = read(fd, cp, size);
 		if (amt < 0)
 			return -1;
 		if (amt == 0)
@@ -263,6 +262,22 @@ suck_it_in(int fd, void *v, int size)
 
 	return total;
 }
+
+int
+push_it_out(int fd, void *v, int size)
+{
+	unsigned char *cp = v;
+	int total, amt;
+
+	for(total = 0; size; total += amt, size -= amt) {
+		amt = write(fd, cp, size);
+		if (amt <= 0)
+			return -1;
+	}
+
+	return total;
+}
+
 int bproc_nodelist_(struct bproc_node_set_t *ns, int fd)
 {
 	int r;
@@ -310,12 +325,11 @@ int bproc_nodelist(struct bproc_node_set_t *ns)
 	char *pathtmp;
 	int r, fd;
 
-	get_status_path(pathtmp);
-	fd = open(pathtmp, O_RDONLY);
+	fd = connectbpmaster();
 	if (fd == -1)
 		return -1;
 
-	r = bproc_nodelist_(ns, fd);
+	r = bproc_nodelist_uds(ns, fd);
 	close(fd);
 	return r;
 }
@@ -613,6 +627,27 @@ int bproc_nodespec(struct bproc_node_set_t *ns, const char *str)
 	r = bproc_nodefilter(ns, &ns_all, str);
 	bproc_nodeset_free(&ns_all);
 	return r;
+}
+
+int
+connectbpmaster(void)
+{
+	int bpmaster;
+	struct sockaddr_un sun;
+
+	bpmaster = socket(PF_UNIX, SOCK_STREAM, 0);
+	if (bpmaster < 0)
+		return bpmaster;
+
+	sun.sun_family = AF_UNIX;
+	strcpy(sun.sun_path, "/tmp/bpmaster");
+
+	if (connect(bpmaster, (struct sockaddr *)&sun, sizeof(sun)) != 0) {
+		return (-1);
+	}
+
+	return (bpmaster);
+
 }
 
 /*

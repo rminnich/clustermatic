@@ -500,8 +500,9 @@ void forward_io_accept(void)
 		sigprocmask(SIG_UNBLOCK, &sset, 0);
 		r = select(accept_sockfd + 1, rset, 0, 0, 0);
 		sigprocmask(SIG_BLOCK, &sset, 0);
-		if (r == -1)
+		if (r == -1) {
 			exit(1);
+		}
 		if (r == 1) {
 			sasize = sizeof(sa);
 			accept_fdlist[accept_nfds] =
@@ -832,26 +833,6 @@ void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
 	}
 }
 
-static int
-connectbpmaster(void)
-{
-	int bpmaster;
-	struct sockaddr_un sun;
-
-	bpmaster = socket(PF_UNIX, SOCK_STREAM, 0);
-	if (bpmaster < 0)
-		return bpmaster;
-
-	sun.sun_family = AF_UNIX;
-	strcpy(sun.sun_path, "/tmp/bpmaster");
-
-	if (connect(bpmaster, (struct sockaddr *)&sun, sizeof(sun)) != 0) {
-		return (-1);
-	}
-
-	return (bpmaster);
-
-}
 static
 int start_processes(struct sockaddr_in *hostip, struct bproc_io_t *io, int iolen,
 		    const char *progname, int argc, char **argv)

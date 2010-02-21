@@ -32,6 +32,7 @@
  * find_node_by_number
  * conn_send_conf
  * accept_new_slave
+ * numnodes
  * do_get_status
  * send_pings
  * main
@@ -42,7 +43,6 @@
  * config_interface
  * add_node
  * nodep (my stuff for bpfs)
- * numnodes
  * add_node_ip
  * check_ip
  * config_timesync
@@ -165,7 +165,6 @@ enum fd_type {
 	CLIENT,
 	SLAVE_CONNECT,
 	SLAVE,
-	BPFS,
 };
 	
 #define IBUFFER_SIZE (sizeof(struct bproc_message_hdr_t) + 64)
@@ -720,7 +719,7 @@ bprocnodeinfo(int n, struct bproc_node_info_t *node)
 int
 numnodes(void)
 {
-	return tc.num_nodes;
+	return conf.num_nodes;
 }
 
 int
@@ -2362,58 +2361,6 @@ int accept_new_client(void)
 	return 0;
 }
 
-static
-int setup_fuse_client(char *fusemntpoint)
-{
-	void bpfsinit(void);
-	int clientfd;
-	struct epoll_event ev;
-	ev.events = EPOLLIN;
-	struct sockaddr_in remote;
-	struct conn_t *conn;
-	int fusefd = -1;
-
-	if (! fusemntpoint)
-		return fusefd;
-
-	fusefd = initfuse(fusemntpoint);
-
-	if (fusefd < 0)
-		return fusefd;
-
-	if (verbose)
-		syslog(LOG_INFO, "fusefd from %d", fusefd);
-
-	conn = &connections[fusefd];
-	conn->fd = fusefd;
-	conn->type = BPFS;
-	conn->state = CONN_RUNNING;
-	conn->ctime = time(0);
-
-	/* no real IO buffering yet, we may never need it */
-#if 0
-	/* I/O buffering */
-	INIT_LIST_HEAD(&conn->backlog);
-	INIT_LIST_HEAD(&conn->reqs);
-	conn->ioffset = 0;
-	conn->ireq = 0;
-	conn->ooffset = 0;
-	conn->oreq = 0;
-#endif
-	/* Add this FD to our world */
-	ev.events = 0;
-	ev.data.u32 = EV(BPFS, conn->fd);
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn->fd, &ev)) {
-		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", conn->fd, &ev,
-		       strerror(errno));
-		exit(1);
-	}
-
-	conn_update_epoll(conn);
-	bpfsinit();
-	return 0;
-}
-
 int
 run_ok(struct node_t *s, uid_t uid, gid_t gid)
 {
@@ -2546,6 +2493,22 @@ int client_msg_in(struct conn_t *c, struct request_t *req)
 			send_msg(s[i], -1, req);
 		}
 		free(s);
+		break;
+	}
+	case BPROC_GET_STATUS:{
+		/* TODO: return s-expression? Or just structs for now? Think a bit. */
+		int i;
+		struct bproc_node_info_t *nodes;
+		struct bproc_nodestatus_resp_t *msg;
+		struct request_t *resp;
+		resp = bproc_new_resp(req, sizeof(*msg) + numnodes() * sizeof(*nodes));
+		msg = bproc_msg(resp);
+		nodes = msg->node;
+		for(i = 0; i < numnodes(); i++)
+			if (bprocnodeinfo(i, &nodes[i]) < 0)
+				break;
+		msg->numnodes = i;
+		conn_send(c, resp);
 		break;
 	}
 	default:{
@@ -2863,7 +2826,7 @@ int conn_write_refill(struct conn_t *c)
 		/* Get next outgoing request */
 		if (!list_empty(&c->reqs)) {
 			conn_write_load(c, &c->reqs);
-		} else if (!list_empty(&c->node->reqs)) {
+		} else if (c->node && !list_empty(&c->node->reqs)) {
 			conn_write_load(c, &c->node->reqs);
 		}
 		break;
@@ -3113,8 +3076,6 @@ int main(int argc, char *argv[])
 		{"version", 0, 0, 'V'},
 		{0, 0, 0, 0}
 	};
-	char *fusemntpoint = "/bpfs";
-	int fusefd = -1;
 
 	while ((c =
 		getopt_long(argc, argv, "f:hVc:m:dvi", long_options, 0)) != EOF) {
@@ -3132,9 +3093,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			machine_config_file = optarg;
-			break;
-		case 'f':
-			fusemntpoint = optarg;
 			break;
 		case 'm':
 
@@ -3197,8 +3155,6 @@ int main(int argc, char *argv[])
 	signal(SIGHUP, (void (*)(int))sighup_handler);	/* reconfig */
 	signal(SIGUSR1, (void (*)(int))sigusr1_handler);	/* debug */
 	signal(SIGUSR2, (void (*)(int))sigusr2_handler);	/* debug */
-
-	fusefd = setup_fuse_client(fusemntpoint);
 
 	if (want_daemonize)
 		daemonize();
@@ -3290,16 +3246,6 @@ int main(int argc, char *argv[])
 				}
 				if (epoll_events[i].events & EPOLLIN) {
 					switch (what) {
-					/* BPFS is not done in the async mode (yet) because the 
-					 * transport of requests is essentially instantaneous.
-					 * we reserve the right to change this decsion. 
-					 */
-					case BPFS: {
-						FuseMsg *m = readfusemsg();
-						if (m)
-							fusedispatch(m);
-						break;
-						}
 					case CLIENT_CONNECT:
 						accept_new_client();
 						break;

@@ -565,14 +565,14 @@ int main(int argc, char *argv[])
 
 	orig_optind = optind;
 
-	status_fd = bproc_notifier();
+	status_fd = connectbpmaster();
 	if (status_fd == -1) {
 		fprintf(stderr, "bproc_notifier fails\n");
 		exit(1);
 	}
 
       again:
-	if (bproc_nodelist_(&ns_all, status_fd) == -1) {
+	if (bproc_nodelist_uds(&ns_all, status_fd) == -1) {
 		fprintf(stderr, "bproc_nodelist_: \n");
 		exit(1);
 	}
