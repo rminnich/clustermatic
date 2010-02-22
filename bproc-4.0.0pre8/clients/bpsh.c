@@ -474,83 +474,6 @@ void forward_io_init(int flags, struct bproc_io_t *io, int iolen)
 	}
 }
 
-static int accept_sockfd, *accept_fdlist, accept_nfds, accept_listsize;
-static int accept_pid;
-static
-void forward_io_accept(void)
-{
-	int r;
-	sigset_t sset;
-	fd_set *rset;
-	int sasize;
-	struct sockaddr sa;
-	rset = alloca(FDS_BYTES(num_files));
-
-	sigemptyset(&sset);
-	sigaddset(&sset, SIGTERM);
-
-	prctl(PR_SET_PDEATHSIG, SIGKILL);	/* kill me when parent dies */
-	/* Just do this until we get killed by our parent */
-
-	/* Resilliance - we should time out periodically and check that
-	 * our parent proces hasn't gone away or anything. */
-	while (accept_nfds < accept_listsize) {
-		memset(rset, 0, FDS_BYTES(num_files));	/* FD_ZERO */
-		FD_SET(accept_sockfd, rset);
-		sigprocmask(SIG_UNBLOCK, &sset, 0);
-		r = select(accept_sockfd + 1, rset, 0, 0, 0);
-		sigprocmask(SIG_BLOCK, &sset, 0);
-		if (r == -1) {
-			exit(1);
-		}
-		if (r == 1) {
-			sasize = sizeof(sa);
-			accept_fdlist[accept_nfds] =
-			    accept(accept_sockfd, &sa, &sasize);
-			while (accept_fdlist[accept_nfds] >= 0) {
-				accept_nfds++;
-				sasize = sizeof(sa);
-				accept_fdlist[accept_nfds] =
-				    accept(accept_sockfd, &sa, &sasize);
-			}
-		}
-	}
-	exit(0);
-}
-
-#define STACK_SIZE 8192
-static
-int start_accepter(int sockfd)
-{
-	void *stack;
-
-	accept_sockfd = sockfd;
-	accept_listsize = num_nodes * 3;	/* up to 3 per node... */
-	accept_fdlist = malloc(sizeof(int) * accept_listsize);
-	accept_nfds = 0;
-	if (!accept_fdlist) {
-		fprintf(stderr, "Out of memory.\n");
-		return -1;
-	}
-	stack = malloc(STACK_SIZE);
-	if (!stack) {
-		fprintf(stderr, "Out of memory.\n");
-		return -1;
-	}
-
-	accept_pid = clone((int (*)(void *))forward_io_accept,
-			   stack + STACK_SIZE - sizeof(long),
-			   CLONE_VM | CLONE_FS | CLONE_FILES, 0);
-	return (accept_pid > 0) ? 0 : -1;
-}
-
-static
-void stop_accepter(void)
-{
-	kill(accept_pid, SIGTERM);
-	waitpid(accept_pid, 0, __WCLONE);
-}
-
 static
 void forward_io_new_fd(int fd)
 {
@@ -613,8 +536,7 @@ void forward_io_new_fd(int fd)
 }
 
 static
-void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
-		int *fds, int nfds)
+void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen)
 {
 	fd_set *rset, *wset;
 	int max = -1;
@@ -626,9 +548,6 @@ void forward_io(int sockfd, int flags, struct bproc_io_t *io, int iolen,
 	wset = alloca(FDS_BYTES(num_files));
 
 	forward_io_init(flags, io, iolen);
-
-	for (i = 0; i < nfds; i++)
-		forward_io_new_fd(fds[i]);
 
 	/* Adjust outstanding connections for the number of dead nodes */
 	if (flags & IO_DIVIDERS) {
@@ -1271,23 +1190,15 @@ printf("Set map[%d] to %d]\n", nodes[i].node, i);
 		}
 	}
 
-	/* FIX ME: Add clone flags to bproc interface so we don't need to
-	 * do this horrible hack. Either that or pthread it now that
-	 * threads aren't so completely horrible. */
-	if (sockfd != -1)
-		if (start_accepter(sockfd))
-			exit(1);
-
 	if (time_cmd)
 		gettimeofday(&start, 0);
 	r = start_processes(&hostaddr, io, 3, progname, cmd_argc, cmd_argv);
-	if (sockfd != -1)
-		stop_accepter();
+
 	if (r)
 		exit(1);
 
 	if (sockfd != -1)
-		forward_io(sockfd, flags, io, 3, accept_fdlist, accept_nfds);
+		forward_io(sockfd, flags, io, 3);
 
 	/* wait for all the child remaining processes to exit. */
 	while (wait(&status) != -1) {
