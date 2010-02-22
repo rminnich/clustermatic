@@ -1145,6 +1145,7 @@ int main(int argc, char *argv[])
 	nodes = malloc(sizeof(*nodes) * count);
 	for (i = 0; i < count; i++) {
 		nodes[i].node = node_list.node[i].node;
+		nodes[i].alive = 1;	/* we're pretty sure ... */
 printf("Set map[%d] to %d]\n", nodes[i].node, i);
 		map[nodes[i].node] = i;
 	}
