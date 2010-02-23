@@ -77,5 +77,10 @@ int cpio(void *buf, size_t len, const char *prepend_string) {
 	if (r != ARCHIVE_OK) {
 		return -1;
 	}
+	r = archive_write_finish(arch_write);
+	if (r != ARCHIVE_OK) {
+		return -1;
+	}
+
 	return count;
 }
