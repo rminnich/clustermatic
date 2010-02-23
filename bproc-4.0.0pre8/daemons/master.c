@@ -303,7 +303,7 @@ static int maxfd = -1;
 static struct bproc_version_t version =
     { 
 	BPROC_MAGIC, 
-	BPROC_ARCH, 
+	0, 
 	PACKAGE_MAGIC, 
 	PACKAGE_VERSION 
 };
@@ -1438,24 +1438,6 @@ static inline void assoc_clear_proc(struct assoc_t *a)
 static
 void assoc_purge_proc(struct assoc_t *a)
 {
-	int pid;
-	struct request_t *req;
-	struct bproc_status_msg_t *msg;
-
-	pid = assoc_pid(a);
-
-	/* Emit a EXIT message to get rid of the ghost on the front end */
-	req = bproc_new_req(BPROC_EXIT, sizeof(*msg));
-	msg = bproc_msg(req);
-	bpr_from_real(msg, pid);
-	bpr_to_ghost(msg, pid);
-	msg->hdr.result = SIGKILL;
-	msg->utime = 0;
-	msg->stime = 0;
-	msg->cutime = 0;
-	msg->cstime = 0;
-	send_msg(0, a->client, req);
-
 	assoc_clear_proc(a);
 }
 
@@ -2056,6 +2038,7 @@ void do_exit_request(struct request_t *req)
 	struct bproc_status_msg_t *msg;
 	msg = bproc_msg(req);
 	a = assoc_find(msg->hdr.from);
+	/* might want to send a kill here but the new protocol is incomplete. */
 	assoc_clear_proc(a);
 }
 
@@ -2093,43 +2076,6 @@ void do_get_status(struct request_t *req)
 	}
 }
 
-static
-void do_client_exit(struct request_t *req)
-{
-	int i, pid;
-	struct assoc_t *a;
-	struct node_t *n;
-	struct bproc_null_msg_t *msg;
-
-	msg = bproc_msg(req);
-	pid = msg->hdr.from;	/* The pid that's exiting */
-	req_free(req);
-
-	for (i = 0; i < conf.num_nodes; i++)
-		conf.nodes[i].flag = 0;
-
-	/* XXX I don't like this loop here... we should get all
-	 * associations on some kind of list */
-	for (i = 0; i < MAXPID; i++) {
-		a = &associations[i];
-		/* If PID is on a slave node or PID is moving... */
-		if (a->proc) {
-		}
-	}
-
-	/* Send the messages to the slaves */
-	for (i = 0; i < conf.num_nodes; i++) {
-		n = &conf.nodes[i];
-		if (n->flag) {
-			req = bproc_new_req(BPROC_PARENT_EXIT, sizeof(*msg));
-			msg = bproc_msg(req);
-			bpr_from_real(msg, pid);
-			bpr_to_node(msg, n->id);
-			route_message(req);
-		}
-	}
-}
-
 /**------------------------------------------------------------------------
  **  Handle incoming requests
  **----------------------------------------------------------------------*/
@@ -2159,8 +2105,6 @@ int route_message(struct request_t *req)
 				/* Don't make note of these because we don't ever want
 				 * to auto-generate responses to these messages */
 			case BPROC_GET_STATUS:
-			case BPROC_PGRP_CHANGE:
-			case BPROC_PARENT_EXIT:
 			case BPROC_NODE_REBOOT:
 				break;
 			default:
@@ -2198,12 +2142,11 @@ int route_message(struct request_t *req)
 	case BPROC_RESPONSE(BPROC_RUN):
 		do_run_response(req);	/* Routing happens in here... */
 		return 0;
+	/* someday ... 
 	case BPROC_EXIT:
 		do_exit_request(req);
 		break;
-	case BPROC_RESPONSE(BPROC_SYS_FORK):
-		do_fork_response(req);
-		break;
+	*/
 	case BPROC_NODE_DOWN:
 		node = find_node_by_number(hdr->to);
 		if (node) {
@@ -2236,9 +2179,6 @@ int route_message(struct request_t *req)
 				break;
 			case BPROC_GET_STATUS:
 				do_get_status(req);
-				break;
-			case BPROC_PARENT_EXIT:
-				do_client_exit(req);
 				break;
 			default:
 				/* there's probably nothing that falls in here (?) */
@@ -2589,17 +2529,15 @@ int slave_msg_in(struct conn_t *c, struct request_t *req)
 
 			/* Check version information */
 			if (version.magic != msg->vers.magic ||
-			    version.arch != msg->vers.arch ||
 			    strcmp(version.version_string,
 				   msg->vers.version_string) != 0) {
 				syslog(LOG_NOTICE,
-				       "node %d: version mismatch.  master=%s-%u-%d;"
-				       " slave=%s-%u-%d (%s)", s->id,
+				       "node %d: version mismatch.  master=%s-%u;"
+				       " slave=%s-%u (%s)", s->id,
 				       version.version_string,
-				       (int)version.magic, (int)version.arch,
+				       (int)version.magic,
 				       msg->vers.version_string,
 				       (int)msg->vers.magic,
-				       (int)msg->vers.arch,
 				       ignore_version ? "ignoring" :
 				       "disconnecting");
 				if (!ignore_version) {
@@ -3084,9 +3022,9 @@ int main(int argc, char *argv[])
 			usage(argv[0]);
 			exit(0);
 		case 'V':
-			printf("%s version %s (%s-%u-%d)\n", argv[0],
+			printf("%s version %s (%s-%u)\n", argv[0],
 			       PACKAGE_VERSION, version.version_string,
-			       version.magic, version.arch);
+			       version.magic);
 			exit(0);
 		case 'i':
 			ignore_version = 1;

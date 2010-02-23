@@ -57,27 +57,6 @@ struct desc_t descs[] = {
 	D(BPROC_FWD_SIG),
 	D(BPROC_GET_STATUS),
 
-	D(BPROC_SYS_FORK),
-	D(BPROC_SYS_KILL),
-	D(BPROC_SYS_WAIT),
-	D(BPROC_SYS_GETSID),
-	D(BPROC_SYS_SETSID),
-	D(BPROC_SYS_GETPGID),
-	D(BPROC_SYS_SETPGID),
-
-	D(BPROC_STOP),
-	D(BPROC_WAIT),
-	D(BPROC_CONT),
-	D(BPROC_EXIT),
-
-	D(BPROC_PARENT_EXIT),
-	D(BPROC_CHILD_ADD),
-	D(BPROC_PGRP_CHANGE),
-	D(BPROC_PTRACE),
-	D(BPROC_REPARENT),
-	D(BPROC_SET_CREDS),
-	D(BPROC_ISORPHANEDPGRP),
-
 	D(BPROC_VERSION),
 	D(BPROC_NODE_CONF),
 	D(BPROC_NODE_PING),
@@ -228,10 +207,9 @@ void print_message(struct debug_hdr_t *req)
 		case BPROC_VERSION:{
 				struct bproc_version_msg_t *msg;
 				msg = bproc_debug_msg(req);
-				printf("%s-%u-%d  %Ld",
+				printf("%s-%u  %Ld",
 				       msg->vers.version_string,
 				       (int)msg->vers.magic,
-				       (int)msg->vers.arch,
 				       (long long)msg->cookie);
 			} break;
 		case BPROC_NODE_CONF:{
@@ -309,102 +287,7 @@ void print_message(struct debug_hdr_t *req)
 				}
 			}
 			break;
-		case BPROC_SYS_FORK:{
-				struct bproc_rsyscall_msg_t *msg;
-				msg = bproc_debug_msg(req);
-				printf("flags=0x%lx", msg->arg[0]);
-			} break;
-		case BPROC_RESPONSE(BPROC_SYS_FORK):{
-				struct bproc_fork_resp_t *msg;
-				msg = bproc_debug_msg(req);
-				printf("oppid=%d ppid=%d", msg->oppid,
-				       msg->ppid);
-			} break;
 
-		case BPROC_SYS_WAIT:{
-				struct bproc_rsyscall_msg_t *msg;
-				msg = bproc_debug_msg(req);
-				printf("pid=%ld options=0x%lx", msg->arg[0],
-				       msg->arg[1]);
-			} break;
-
-		case BPROC_PTRACE:{
-				struct bproc_ptrace_msg_t *msg =
-				    bproc_debug_msg(req);
-				printf("%-8.8s pid=%d addr=0x%lx data=0x%lx",
-				       desc_lookup(descs_ptrace, msg->request),
-				       msg->hdr.to, msg->addr,
-				       msg->data.data[0]);
-				if (msg->request == PTRACE_ATTACH) {
-					printf(" uid=%d gid=%d ce=0x%x",
-					       msg->uid, msg->gid,
-					       msg->cap_effective);
-				}
-			}
-			break;
-		case BPROC_RESPONSE(BPROC_PTRACE):{
-				struct bproc_ptrace_msg_t *msg =
-				    bproc_debug_msg(req);
-				printf("%-8.8s",
-				       desc_lookup(descs_ptrace, msg->request));
-				if (msg->request == PTRACE_ATTACH) {
-					printf(" nlchild_adj=%d",
-					       msg->data.data ? 1 : 0);
-				}
-				if (msg->request == PTRACE_PEEKDATA ||
-				    msg->request == PTRACE_PEEKTEXT) {
-					int i;
-					printf(" addr=0x%0*lx bytes=%d",
-					       (int)sizeof(long) * 2, msg->addr,
-					       msg->bytes);
-					/* ah fun. Cast depends on architecture type. I really love gcc */
-					for (i = 0;
-					     i < msg->bytes / sizeof(int); i++)
-						printf(" %0*lx",
-						       (int)sizeof(int) * 2,
-						       ((long unsigned int *)
-							msg->data.data)[i]);
-				}
-			} break;
-		case BPROC_REPARENT:{
-				struct bproc_reparent_msg_t *msg =
-				    bproc_debug_msg(req);
-				printf("ptrace=0x%x new_parent=%d", msg->ptrace,
-				       msg->new_parent);
-			} break;
-
-		case BPROC_FWD_SIG:{
-				struct bproc_signal_msg_t *sig =
-				    bproc_debug_msg(req);
-				printf("sig = %d   kill: pid=%d uid=%d",
-				       sig->info.si_signo,
-				       sig->info._sifields._kill._pid,
-				       sig->info._sifields._kill._uid);
-			} break;
-		case BPROC_SYS_SETPGID:{
-				struct bproc_rsyscall_msg_t *msg =
-				    bproc_debug_msg(req);
-				printf("pid=%ld pgid=%ld", msg->arg[0],
-				       msg->arg[1]);
-			} break;
-		case BPROC_SYS_GETPGID:{
-				struct bproc_rsyscall_msg_t *msg =
-				    bproc_debug_msg(req);
-				printf("pid=%ld", msg->arg[0]);
-			} break;
-		case BPROC_PGRP_CHANGE:{
-				struct bproc_pgrp_msg_t *msg =
-				    bproc_debug_msg(req);
-				printf("pgid=%d", msg->pgid);
-			} break;
-		case BPROC_SYS_KILL:{
-				struct bproc_signal_msg_t *msg =
-				    bproc_debug_msg(req);
-				printf("pid=%d sig=%d", msg->pid,
-				       msg->info.si_signo);
-			} break;
-		case BPROC_STOP:
-		case BPROC_CONT:
 		case BPROC_RESPONSE(BPROC_GET_STATUS):{
 				struct bproc_status_msg_t *msg =
 				    bproc_debug_msg(req);

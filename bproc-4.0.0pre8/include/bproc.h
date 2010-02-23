@@ -38,43 +38,15 @@
 
 /*--- BProc version tag stuff --------------------------------------*/
 #define BPROC_MAGIC {'B','P','r'}
-enum {
-	BPROC_ARCH_X86 = 1,
-	BPROC_ARCH_ALPHA = 2,
-	BPROC_ARCH_PPC = 3,
-	BPROC_ARCH_X86_64 = 4,
-	BPROC_ARCH_PPC64 = 5
-};
-#if defined(__i386__)
-#define BPROC_ARCH BPROC_ARCH_X86
-#elif defined(__alpha__)
-#define BPROC_ARCH BPROC_ARCH_ALPHA
-#elif defined(powerpc)
-#define BPROC_ARCH BPROC_ARCH_PPC
-#elif defined(__x86_64__)
-#define BPROC_ARCH BPROC_ARCH_X86_64
-#elif defined(__powerpc64__)
-#define BPROC_ARCH BPROC_ARCH_PPC64
-#else
-#error "BProc does not support this architecture."
-#endif
 
 struct bproc_version_t {
 	char bproc_magic[3];
-	uint8_t arch;
+	uint8_t unused;
 	uint32_t magic;
 	char version_string[24];
 };
 
 /*--- Structs passed between user programs  ----------------------*/
-
-/* All BProc attributes start with this */
-#define BPROC_XATTR_PREFIX   "bproc."
-#define BPROC_STATE_XATTR    "bproc.state"
-#define BPROC_ADDR_XATTR     "bproc.addr"
-#define BPROC_XATTR_MAX_NAME_SIZE  63
-#define BPROC_XATTR_MAX_VALUE_SIZE 64
-#define BPROC_XATTR_MAX      32	/* max # of extended attributes */
 
 #define BPROC_STATE_LEN 15
 struct bproc_node_info_t {
@@ -140,30 +112,6 @@ enum bproc_request_types {
 	/* Messages from ghost->real process */
 	BPROC_FWD_SIG,
 	BPROC_GET_STATUS,
-
-	/* Remote system calls for real processes */
-	BPROC_SYS_FORK,
-	BPROC_SYS_KILL,
-	BPROC_SYS_WAIT,
-	BPROC_SYS_GETSID,
-	BPROC_SYS_SETSID,
-	BPROC_SYS_GETPGID,
-	BPROC_SYS_SETPGID,
-
-	/* Real process -> ghost notifications */
-	BPROC_STOP,
-	BPROC_WAIT,
-	BPROC_CONT,
-	BPROC_EXIT,
-
-	BPROC_PARENT_EXIT,	/* ppid,oppid exited. */
-	BPROC_CHILD_ADD,	/* ADD a child to a remote process */
-	/*BPROC_CHILD_DEL, *//* REMOVE a child from a remote process */
-	BPROC_PGRP_CHANGE,	/* somebody changed your pgrp */
-	BPROC_PTRACE,		/* Normal ptrace syscall stuff */
-	BPROC_REPARENT,		/* Update parent pointer on a process. */
-	BPROC_SET_CREDS,
-	BPROC_ISORPHANEDPGRP,
 
 	/* System control/status */
 	BPROC_VERSION,

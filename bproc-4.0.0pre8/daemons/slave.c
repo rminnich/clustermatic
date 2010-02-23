@@ -998,17 +998,15 @@ int conn_msg_in(struct conn_t *c, struct request_t *req)
 			    (struct bproc_version_msg_t *)hdr;
 
 			if (version.magic != msg->vers.magic ||
-			    version.arch != msg->vers.arch ||
 			    strcmp(version.version_string,
 				   msg->vers.version_string) != 0) {
 				syslog(LOG_NOTICE,
-				       "BProc version mismatch.  slave=%s-%u-%d;"
-				       " master=%s-%u-%d (%s)",
+				       "BProc version mismatch.  slave=%s-%u;"
+				       " master=%s-%u (%s)",
 				       version.version_string,
-				       (int)version.magic, (int)version.arch,
+				       (int)version.magic,
 				       msg->vers.version_string,
 				       (int)msg->vers.magic,
-				       (int)msg->vers.arch,
 				       ignore_version ? "ignoring" :
 				       "disconnecting");
 				if (!ignore_version)
@@ -1835,9 +1833,9 @@ int main(int argc, char *argv[])
 			usage(argv[0]);
 			exit(0);
 		case 'V':
-			printf("%s version %s (%s-%u-%d)\n", argv[0],
+			printf("%s version %s (%s-%u)\n", argv[0],
 			       PACKAGE_VERSION, version.version_string,
-			       version.magic, version.arch);
+			       version.magic);
 			exit(0);
 		case 'i':
 			ignore_version = 1;

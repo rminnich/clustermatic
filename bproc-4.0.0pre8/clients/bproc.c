@@ -43,17 +43,6 @@
 #include "bproc.h"		/* This is the header from ../kernel */
 #include <bproc.h>
 
-#ifdef NO_XATTR
-/* A lot of libcs out there don't have the get/setxattr system calls.
- * We have our own implementation here. */
-#include "xattr.h"
-#define getxattr __bproc_getxattr
-#define setxattr __bproc_setxattr
-#else
-#include <sys/xattr.h>
-#endif
-
-
 /*-------------------------------------------------------------------------
  *  Nodeset manipulation routines
  *-----------------------------------------------------------------------*/
@@ -206,44 +195,14 @@ int bproc_currnode(void)
 
 int bproc_nodestatus(int num, char *status, int len)
 {
-	int r;
-	char *path;
-	get_node_path(path, num);
-	r = getxattr(path, BPROC_STATE_XATTR, status, len);
-	if (r != -1 && r < len)	/* null terminate if there's room */
-		status[r] = 0;
-	return r;
+	/* need to use the socket stuff in msg.c now */
+	return -1;
 }
 
 int bproc_nodeinfo(int node, struct bproc_node_info_t *info)
 {
-	char *path;
-	struct stat buf;
-
-	get_node_path(path, node);
-
-	if (stat(path, &buf) != 0) {
-		errno = BE_INVALIDNODE;
-		return -1;
-	}
-
-	info->node = node;
-	info->mode = buf.st_mode & 0111;	/*  */
-	info->user = buf.st_uid;
-	info->group = buf.st_gid;
-
-	if (getxattr(path, BPROC_STATE_XATTR, info->status,
-		     sizeof(info->status)) < 0) {
-		errno = BE_INVALIDNODE;
-		return -1;
-	}
-
-	if (getxattr(path, BPROC_ADDR_XATTR, &info->addr,
-		     sizeof(info->addr)) < 0) {
-		errno = BE_INVALIDNODE;
-		return -1;
-	}
-	return 0;
+	/* need to use the socket stuff in msg.c now */
+	return -1;
 }
 
 int
@@ -336,14 +295,8 @@ int bproc_nodelist(struct bproc_node_set_t *ns)
 
 int bproc_nodeaddr(int node, struct sockaddr *s, int *size)
 {
-	int len;
-	char *p;
-	get_node_path(p, node);
-	len = getxattr(p, BPROC_ADDR_XATTR, s, *size);
-	if (len < 0)
-		return -1;
-	*size = len;
-	return 0;
+	/* need to use the socket stuff in msg.c now */
+	return -1;
 }
 
 int bproc_setnodeattr(int node, char *name, void *value, int size)
@@ -369,11 +322,8 @@ int bproc_getnodeattr(int node, char *name, void *value, int size)
 
 int bproc_nodesetstatus(int node, char *status)
 {
-	char *path;
-	get_node_path(path, node);
-	if (!path)
-		return -1;
-	return setxattr(path, BPROC_STATE_XATTR, status, strlen(status), 0);
+	/* need to use the socket stuff in msg.c now */
+	return -1;
 }
 
 int bproc_chmod(int node, int mode)
