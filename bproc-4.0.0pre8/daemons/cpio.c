@@ -220,7 +220,7 @@ static int file_to_archive(struct cpio *cpio, const char *srcpath) {
 	return (r);
 }
 
-int cpio_create(char **filenames, int elements) {
+void* cpio_create(char **filenames, int elements) {
 	struct cpio *cpio;
 	struct archive_entry *entry, *spare;
 	int r, i;
@@ -282,7 +282,7 @@ int cpio_create(char **filenames, int elements) {
 		errx(1, "%s", archive_error_string(cpio->archive));
 
 	archive_write_finish(cpio->archive);
-	write(1, output_buf, output_buf_used);
+//	write(1, output_buf, output_buf_used);
 
 	return 0;
 }
