@@ -84,7 +84,6 @@ int cpio(void *buf, size_t len, const char *prepend_string) {
 
 	return count;
 }
-
 struct cpio {
 	/* Options */
 	const char *filename;
@@ -226,6 +225,9 @@ int cpio_create(char **filenames, int elements) {
 	struct archive_entry *entry, *spare;
 	int r, i;
 	static char buff[16384];
+	int output_buf_size = 33554432;
+	char *output_buf = calloc(1, output_buf_size);
+	size_t output_buf_used = 0;
 
 	cpio = calloc(1, sizeof(struct cpio));
 
@@ -253,7 +255,7 @@ int cpio_create(char **filenames, int elements) {
 	cpio->linkresolver = archive_entry_linkresolver_new();
 	archive_entry_linkresolver_set_strategy(cpio->linkresolver, archive_format(cpio->archive));
 
-	r = archive_write_open_file(cpio->archive, cpio->filename);
+	r = archive_write_open_memory(cpio->archive, output_buf, output_buf_size, &output_buf_used);
 	if (r != ARCHIVE_OK) {
 		errx(1, "%s", archive_error_string(cpio->archive));
 	}
@@ -280,6 +282,7 @@ int cpio_create(char **filenames, int elements) {
 		errx(1, "%s", archive_error_string(cpio->archive));
 
 	archive_write_finish(cpio->archive);
+	write(1, output_buf, output_buf_used);
 
 	return 0;
 }
