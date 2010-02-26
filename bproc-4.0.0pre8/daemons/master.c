@@ -55,6 +55,12 @@
  * conn_write_refill
  */
 #define _GNU_SOURCE
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -66,19 +72,14 @@
 #include <sys/un.h>
 #include <sys/resource.h>
 #include <time.h>
-#include <unistd.h>
 #include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
 #define SYSLOG_NAMES 1
 #include <syslog.h>
+#include <sys/reboot.h>
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <assert.h>
 
 #include <sys/epoll.h>
 
@@ -90,7 +91,6 @@
 #include <sched.h>
 
 #include "bproc.h"
-#include "a.h"
 
 #include "list.h"
 #include "cmconf.h"
@@ -109,11 +109,21 @@
 #define EVFD(ev) ((ev)>>3)
 #define EVTYPE(ev) ((ev)&7)
 
+/* slave mode private name space */
+#define FS_NAMESPACE_DIR "/.slave-root-%d"
+#define TIME_ADJ_COMPLAIN 50000	/* bitch if time adjustment is > this (us). */
+#define TIME_ADJ_MIN      10000	/* don't adjust if delta < than this. */
+
+/* slave mode connection state */
+#define conn_out_empty(x) (!(x)->oreq)
+
 struct request_t {
 	struct list_head list;
 };
 
 #define bproc_msg(req)  ((void *)(req+1))
+static LIST_HEAD(reqs_to_master);
+static LIST_HEAD(reqs_to_masq);
 
 #define EPOLL_MAXEV 1024
 
@@ -165,6 +175,7 @@ enum fd_type {
 	CLIENT,
 	SLAVE_CONNECT,
 	SLAVE,
+	MASTER
 };
 	
 #define IBUFFER_SIZE (sizeof(struct bproc_message_hdr_t) + 64)
@@ -287,6 +298,22 @@ static int ignore_version = 1;
 static int clientconnect;	/*, listenfd; */
 
 static int epoll_fd;
+/* indicates master is running as "secondary" -- i.e. as both master and slave. 
+ * In this mode, the "client" connection is actually from a master, over TCP
+ */
+static int slavemode = 0;
+/* Slave daemon state */
+static time_t cookie = 0;
+static LIST_HEAD(clist);
+static struct conn_t *conn_out = 0, *conn_in = 0;
+static int ping_timeout = DEFAULT_PING_TIMEOUT;
+static int node_number = BPROC_NODE_NONE;
+static time_t lastping;
+static int manager_fd;
+static int private_namespace = -1;
+static char *log_ident;
+static int log_facility = LOG_DAEMON;
+static int log_stderr = 0;
 
 /* Machine state */
 #define MAXPID 32768
@@ -2614,6 +2641,610 @@ int slave_msg_in(struct conn_t *c, struct request_t *req)
 		return 1;
 	}
 }
+
+/* functions that implement a slave */
+/* count is text, and ends with a non-numeric e.g. \n or \0
+ * source is moved to end
+ * err handling later. 
+ */
+int
+buildarr(char **source, int *count, char ***list)
+{
+	char **arr;
+	int i;
+	char *cp = *source;
+syslog(LOG_NOTICE, "cp %p %s", cp, cp);
+	*count = strtoul(cp, 0, 10);
+syslog(LOG_NOTICE, "COUNT %d", *count);
+	/* alloc an extra for NULL terminating the array */
+	arr = calloc(*count + 1, sizeof(char *));
+	while (*cp)
+		cp++;
+	cp++;
+syslog(LOG_NOTICE, "cp %p %s", cp, cp);	
+	for(i = 0; i < *count; i++){
+syslog(LOG_NOTICE, "cp %p", cp);
+		arr[i] = cp;
+		cp += strlen(cp) + 1;
+	}
+
+	*source = cp;
+	*list = arr;
+syslog(LOG_NOTICE, "buildarr done");
+	return 0;
+}
+
+static
+int setup_iofw(struct sockaddr_in *raddr)
+{
+	int lsize, errnosave;
+	struct sockaddr_in tmp;
+	int fd;
+
+	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+		errnosave = errno;
+		syslog(LOG_ERR, "socket: %s", strerror(errno));
+		errno = errnosave;
+		return 0;
+	}
+
+	if (verbose)
+		syslog(LOG_INFO, "Connecting to %s:%d...",
+		       inet_ntoa(raddr->sin_addr), ntohs(raddr->sin_port));
+
+	if (connect(fd, (struct sockaddr *)raddr, sizeof(*raddr)) == -1) {
+		if (errno != EINPROGRESS) {
+			errnosave = errno;
+			syslog(LOG_ERR, "connect(%s:%d): %s",
+			       inet_ntoa(raddr->sin_addr),
+			       ntohs(raddr->sin_port), strerror(errno));
+			close(fd);
+			errno = errnosave;
+			return 0;
+		}
+	}
+
+	set_keep_alive(fd);
+	set_no_delay(fd);
+	set_non_block(fd);
+
+	return fd;
+}
+
+
+/* there is not struct that we can use; this is an array of bytes we have to interpret */
+struct runargs {
+	struct conn_t *c;
+	struct request_t *req;
+};
+void 
+runthread(struct runargs *r)
+{
+	struct conn_t *c = r->c;
+	struct request_t *req = r->req;
+	char *msg = bproc_msg(req), *cp;
+	int len;
+	int argc;
+	char **argv;
+	int envc, nodec;
+	char **env, **nodes;
+	int flags;
+	char *dirname;
+	char cmd[128];
+	FILE *p;
+	int cpiolen;
+	struct bproc_message_hdr_t *hdr;
+	char **ports;
+	int portc;
+	struct sockaddr_in addr;
+	char *packstart;
+	int packoff, node;
+	uid_t uid;
+	gid_t gid;
+	int ret;
+	int fd;
+	int i;
+	/* clean path */
+	if (umount("/tmp") || mount("none", "/tmp", "tmpfs", 0, 0)) {
+		syslog(LOG_ERR, "mount(\"none\", \"%s\", \"tmpfs\", 0, 0): %s",
+		       "/tmp", strerror(errno));
+		exit(1);
+	}
+
+	dirname=strdup("/tmp/bproc2XXXXXX");
+	mkdtemp(dirname);
+	hdr = (struct bproc_message_hdr_t *)msg;
+	len = hdr->size;
+	cp = msg + sizeof(*hdr);
+	/* get the packet start. Nodes will start at 8 bytes past this point. */
+	packoff = strtoul(cp, 0, 10);
+	packstart = cp + packoff;
+	syslog(LOG_NOTICE, "do_run: cp %p packoff %d packstart %p", cp, packoff, packstart);
+	cp += 8;
+syslog(LOG_NOTICE, "cp %s", cp);
+	uid = strtoul(cp, 0, 10);
+	cp += strlen(cp) + 1;
+syslog(LOG_NOTICE, "cp %s", cp);
+	gid = strtoul(cp, 0, 10);
+	cp += strlen(cp) + 1;
+	syslog(LOG_NOTICE, "uid %d gid %d\n", uid, gid);
+	node = strtoul(cp, 0, 10);
+syslog(LOG_NOTICE, "index @ %d i %s %d", (int)(cp-msg),cp, node);
+	cp += strlen(cp) + 1;
+	syslog(LOG_NOTICE, "do_run: cp %s\n", cp);
+	syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &argc, &argv);
+	buildarr(&cp, &nodec, &nodes);
+	syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &nodec, &nodes);
+
+	cp = packstart;
+	buildarr(&cp, &argc, &argv);
+syslog(LOG_NOTICE, "buildarr %p %p %p\n", &cp, &envc, &env);
+	buildarr(&cp, &envc, &env);
+	
+	/* get the flags */
+	flags = strtoul(cp, 0, 10);
+	cp += strlen(cp) + 1;
+	syslog(LOG_NOTICE, "flags %d\n", flags);
+	/* host IP and ports */
+	syslog(LOG_NOTICE, "hostip %s", inet_ntoa(addr.sin_addr));
+	cp += strlen(cp) + 1;
+	buildarr(&cp, &portc, &ports);
+	/* nodes */
+	/* now do the cpio unpack */
+	/* let's depend on having a cpio command for now. */
+	/* fix the tmp directory permission while we are still root*/
+	chmod(dirname, 0700);
+	chown(dirname, uid, gid);
+	setgid(gid);
+	setuid(uid);
+syslog(LOG_NOTICE, "dirname %s", dirname);
+	chdir(dirname);
+	syslog(LOG_NOTICE, "chdir %s", dirname);
+	cpiolen = len - (cp - msg);
+	syslog(LOG_NOTICE, "do_run: cpio len %d\n", cpiolen);
+	if (cpio(cp, cpiolen, "./") < 1) {
+		syslog(LOG_NOTICE, "do_run: cpio failed");
+		return;
+	}
+	/* let's run it. */
+syslog(LOG_NOTICE, "ready to go");
+	/* note: don't worry about freeing this. We're  going to exec or exit either way */
+	char *name = malloc(strlen(argv[0]) + strlen("./") + 1);
+	name[0] = 0;
+	strcat(name, "./");
+	strcat(name, argv[0]);
+	argv[0] = name;
+	/* fix up IO */
+	/* weirdly it seems bproc forwarding current sends all the same port. But let's plan for the future. 
+	 * new socket for each port (soon)
+	 */
+	for(i = 0; i < portc; i++) {
+		addr.sin_addr = c->raddr;
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(strtoul(ports[i], 0, 10));
+		fd = setup_iofw(&addr);
+		write(fd, &node, sizeof(node));
+		write(fd, &i, sizeof(i));
+		dup2(fd, i);
+	}
+	putenv("LD_LIBRARY_PATH=lib:lib64:usr/lib:usr/lib64");
+	syslog(LOG_NOTICE, "do_run: exec %s\n", argv[0]);
+	execv(argv[0], argv);
+	syslog(LOG_NOTICE, "do_run: exec %s FAILED\n", argv[0]);
+	exit(1);
+}
+
+int 
+do_run(struct conn_t *c, struct request_t *req)
+{
+	int ret;
+	void *stack;
+	struct runargs *r;
+
+	r = malloc(sizeof(*r));
+	if (! r)  {
+		fprintf(stderr, "Out of memory.\n");
+		return -1;
+	}
+	stack = malloc(8192);
+	if (!stack) {
+		free(r);
+		fprintf(stderr, "Out of memory.\n");
+		return -1;
+	}
+	r->c = c;
+	r->req = req;
+	/* no need to CLONE_VM afaict */
+	clone((int (*)(void *))runthread,
+		   stack + 8192 - sizeof(long),
+		   CLONE_NEWNS, r);
+	/* either it worked or did not, but we don't much care */
+	/* IF WE EVER CLONEVM WE HAVE TO REMOVE THIS FREE */
+	free(r);
+	free(stack);
+	if ((req)) {
+		req_free(req);
+		return 0;
+	}
+
+}
+
+/* NOTE: as of 2/25/2010, these are in just enough to get it to build. Lots of work left. */
+static
+void reconnect(struct conn_t *conn, struct request_t *req)
+{
+
+}
+
+/* This is a bit of a mess.  It would be cleaner if the slave daemon *
+ * could know ahead of time whether or not a private name space was
+ * desired.  That would allow */
+static
+int privatize_namespace(void)
+{
+	/* we sort of privatize always now. Only issue is whether to chroot and bpsh should indicate that. So this 
+	 * function may have no use
+	 */
+}
+
+static
+void do_node_reboot(struct request_t *req)
+{
+	int cmd, r;
+	char *cmd_name;
+	struct bproc_null_msg_t *msg;
+
+	msg = bproc_msg(req);
+	switch (msg->hdr.req) {
+	case BPROC_NODE_REBOOT:
+		cmd = RB_AUTOBOOT;
+		cmd_name = "reboot";
+		break;
+	case BPROC_NODE_HALT:
+		cmd = RB_HALT_SYSTEM;
+		cmd_name = "halt";
+		break;
+	case BPROC_NODE_PWROFF:
+		cmd = RB_POWER_OFF;
+		cmd_name = "power off";
+		break;
+	default:
+		syslog(LOG_ERR, "Unrecognized node state command: %d",
+		       msg->hdr.req);
+		return;
+	}
+
+	syslog(LOG_NOTICE, "Shutting down slave with command: %s", cmd_name);
+
+	/* Shut down and get ready to restart the box. */
+	close(conn_out->fd);
+	/* Sync disks */
+	sync();
+	sync();
+	sync();
+
+	/* this should hopefully be enough to get the disks sync'ed and
+	 * get the socket closed. */
+	sleep(3);
+
+	/* This is a mess.  Power off and halt just become exit(0) in the
+	 * linux kernel if they don't work.  Therefore, we're goign to do
+	 * it in another process here.  If we wait() on that process ok,
+	 * we'll assume that whatever it was failed try something else */
+	r = fork();
+	if (r == 0) {
+		reboot(cmd);
+		syslog(LOG_ERR, "Reboot failed: %s", strerror(errno));
+		exit(0);
+	}
+	waitpid(r, 0, 0);
+
+	/* try the fall-back options */
+	switch (cmd) {
+	case RB_HALT_SYSTEM:
+	case RB_POWER_OFF:
+		while (1)
+			pause();	/* simulate "halt" */
+	default:
+		syslog(LOG_ERR, "Failed to reboot.  Wow, that sucks.");
+		exit(1);	/* Maybe our parent will do a better job? */
+	}
+}
+
+
+/* no real connection list yet. Ignore for now */
+static
+void set_running(struct conn_t *conn)
+{
+
+	struct conn_t *c;
+	int addrsize;
+	struct sockaddr addr;
+	struct list_head *l;
+
+#if 0
+	for (l = clist.next; l != &clist; l = l->next) {
+		c = list_entry(l, struct conn_t, list);
+		if (c != conn && c->state == CONN_RUNNING)
+			conn_eof(c);
+	}
+#endif
+	conn->state = CONN_RUNNING;
+	conn_out = conn;
+	if (!conn_in)
+		conn_in = conn;
+
+	if (conn->ireq) {
+		respond(conn->ireq, 0);
+		free(conn->ireq);
+		conn->ireq = 0;
+	}
+
+	/* Update address information for our procs */
+	addrsize = sizeof(addr);
+	if (getsockname(conn->fd, &addr, &addrsize)) {
+		syslog(LOG_ERR, "getsockname: %s", strerror(errno));
+		return;
+	}
+	addrsize = sizeof(addr);
+	if (getpeername(conn->fd, &addr, &addrsize)) {
+		syslog(LOG_ERR, "getpeername: %s", strerror(errno));
+		return;
+	}
+	if (verbose)
+		syslog(LOG_INFO, "Connection to %s:%d up and running",
+		       inet_ntoa(((struct sockaddr_in *)&addr)->sin_addr),
+		       ntohs(((struct sockaddr_in *)&addr)->sin_port));
+}
+
+
+static
+void update_system_time(long time_sec, long time_usec)
+{
+	struct timeval sys_time_;
+	int64_t sys_time, master_time;
+	long adj;
+	static int time_set = 0;
+
+	if (time_sec == 0) {	/* no time stamp... */
+		lastping = time(0);
+		return;
+	}
+
+	/* NOTE: This isn't going to go well if there's multiple masters
+	 * with clocks that disagree....  Only one should be sending
+	 * times, I suppose.  Or maybe we need hierarchy or something.
+	 *
+	 * NOTE 2: I kinda just pulled this algorithm out of my ass.
+	 */
+	if (!time_set) {
+		/* The first time through we just set our time to whatever the
+		 * front end says. */
+		time_set = 1;
+		sys_time_.tv_sec = time_sec;
+		sys_time_.tv_usec = time_usec;
+		settimeofday(&sys_time_, 0);
+		lastping = sys_time_.tv_sec;
+		return;
+	}
+
+	gettimeofday(&sys_time_, 0);
+	sys_time = (sys_time_.tv_sec * (uint64_t) 1000000) + sys_time_.tv_usec;
+	master_time = (time_sec * (uint64_t) 1000000) + time_usec;
+	adj = (master_time - sys_time) >> 1;	/* split the difference */
+
+	/*printf("TIMES: %Ld %Ld %ld\n", sys_time, master_time, adj); */
+
+	if (adj > TIME_ADJ_MIN || adj < -TIME_ADJ_MIN) {
+		/* If the adjustment seems too big, just set. */
+		if (adj > TIME_ADJ_COMPLAIN || adj < -TIME_ADJ_COMPLAIN)
+			sys_time = master_time;
+		else
+			sys_time += adj;
+
+		/* Update system time */
+		sys_time_.tv_sec = sys_time / 1000000;
+		sys_time_.tv_usec = sys_time % 1000000;
+		settimeofday(&sys_time_, 0);
+
+		/* Bitch if our time seems to be moving too much. */
+		if (adj > TIME_ADJ_COMPLAIN || adj < -TIME_ADJ_COMPLAIN) {
+			syslog(LOG_NOTICE, "Time adjustment: %.3f -> %ld.%06ld",
+			       adj / 1000000.0, (long)sys_time_.tv_sec,
+			       (long)sys_time_.tv_usec);
+		}
+	}
+	lastping = sys_time / 1000000;
+}
+
+/* special functions for slave IO to master. These need to be merged at some point. */
+static
+void conn_respond(struct conn_t *c, struct request_t *req, int err)
+{
+	struct request_t *resp;
+	struct bproc_null_msg_t *msg;
+
+	resp = bproc_new_resp(req, sizeof(*msg));
+	msg = bproc_msg(resp);
+	msg->hdr.result = err;
+
+	conn_send(c, resp);
+}
+
+static
+void conn_remove(struct conn_t *conn, int reason)
+{
+	list_del(&conn->list);	/* remove from connection list */
+
+	if (conn->ireq) {
+		syslog(LOG_NOTICE, "Reconnect failed: %s\n", strerror(reason));
+		respond(conn->ireq, -reason);
+		free(conn->ireq);
+		conn->ireq = 0;
+	}
+
+	if (conn->state == CONN_RUNNING) {
+		syslog(LOG_NOTICE, "Lost connection to master");
+
+		/* Clean up other connections */
+		while (!list_empty(&clist)) {
+			struct conn_t *c;
+			c = list_entry(clist.next, struct conn_t, list);
+			list_del(&c->list);
+
+			if (c->ireq)
+				free(c->ireq);
+			close(c->fd);
+			free(c);
+		}
+	}
+	if (conn->ireq)
+		free(conn->ireq);
+	close(conn->fd);
+	free(conn);
+}
+
+/* what is this for, precisely? */
+static inline void masq_send(struct request_t *req)
+{
+	list_add_tail(&req->list, &reqs_to_masq);
+}
+
+
+/*
+ *  master_msg_in - handle an incoming master message
+ *
+ *  returns true if the connection is still alive after processing
+ *  this message.
+ */
+static
+int master_msg_in(struct conn_t *c, struct request_t *req)
+{
+	struct bproc_message_hdr_t *hdr;
+
+	msgtrace(BPROC_DEBUG_MSG_FROM_MASTER, NULL, req);
+
+	hdr = bproc_msg(req);
+	switch (hdr->req) {
+	case BPROC_VERSION:{
+			struct bproc_version_msg_t *msg =
+			    (struct bproc_version_msg_t *)hdr;
+
+			if (version.magic != msg->vers.magic ||
+			    strcmp(version.version_string,
+				   msg->vers.version_string) != 0) {
+				syslog(LOG_NOTICE,
+				       "BProc version mismatch.  slave=%s-%u;"
+				       " master=%s-%u (%s)",
+				       version.version_string,
+				       (int)version.magic,
+				       msg->vers.version_string,
+				       (int)msg->vers.magic,
+				       ignore_version ? "ignoring" :
+				       "disconnecting");
+				if (!ignore_version)
+					return -1;
+			}
+			cookie = msg->cookie;
+			free(req);
+		}
+		return 1;
+	case BPROC_NODE_CONF:{
+			struct bproc_conf_msg_t *msg;
+			if (c->state == CONN_NEW) {
+				/*syslog(LOG_DEBUG, "Received PING.  Setting to running."); */
+				set_running(c);
+			}
+			msg = bproc_msg(req);
+
+			update_system_time(msg->time_sec, msg->time_usec);
+
+			/* This only gets setup on the FIRST conf message - we can't
+			 * be flipping file system name spaces around. */
+			if (private_namespace == -1) {
+				private_namespace =
+				    msg->private_namespace ? 1 : 0;
+				if (private_namespace) {
+					syslog(LOG_NOTICE,
+					       "Setting up private FS name space.");
+					privatize_namespace();
+				}
+			} else {
+				static int complained = 0;
+				if (private_namespace != msg->private_namespace
+				    && !complained) {
+					complained = 1;
+					syslog(LOG_WARNING,
+					       "private namespace option changed.  This "
+					       "option cannot be changed without starting the slave "
+					       "daemon.");
+				}
+			}
+
+			/* Update configuration details */
+			if (msg->hdr.to != node_number) {
+				node_number = msg->hdr.to;
+				syslog(LOG_NOTICE, "Setting node number to %d",
+				       node_number);
+			}
+			if (msg->ping_timeout != ping_timeout) {
+				ping_timeout = msg->ping_timeout;
+				syslog(LOG_NOTICE, "Setting ping timeout to %d",
+				       ping_timeout);
+			}
+
+			/* Pass master list up to the slave manager */
+			write(manager_fd, &msg->masters_size,
+			      sizeof(msg->masters_size));
+			write(manager_fd, ((void *)msg) + msg->masters,
+			      msg->masters_size *
+			      sizeof(struct bproc_master_t));
+			free(req);
+		} return 1;
+	case BPROC_NODE_PING:{
+			struct bproc_ping_msg_t *msg;
+			msg = bproc_msg(req);
+			update_system_time(msg->time_sec, msg->time_usec);
+			conn_respond(c, req, 0);
+			free(req);
+		} return 1;
+	case BPROC_NODE_EOF:
+		/* not sure yet. 
+		if (c->state != CONN_CLOSING)
+			syslog(LOG_NOTICE,
+			       "Received EOF on non-closing connection.");
+		*/
+		conn_remove(c, 0);
+		free(req);
+		return 0;
+
+	/*--- Node commands ---*/
+	case BPROC_NODE_CHROOT:
+		/* not really supported */
+		//do_slave_chroot(req);
+		free(req);
+		return 1;
+	case BPROC_NODE_RECONNECT:
+		reconnect(c, req);
+		/* free handled internally */
+		return 1;
+	case BPROC_NODE_REBOOT:
+	case BPROC_NODE_HALT:
+	case BPROC_NODE_PWROFF:
+		do_node_reboot(req);
+		free(req);
+		return 1;
+
+	/* --- Process commands ---*/
+	case BPROC_RUN:
+		do_run(c, req);
+		return 1;
+	default:
+		masq_send(req);
+		return 1;
+	}
+}
+
 
 static
 int conn_msg_in(struct conn_t *c, struct request_t *req)

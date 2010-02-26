@@ -10,7 +10,7 @@ include ../Makefile.conf
 ALL:=bpmaster bpslave libbpslave.a bptrace
 all: $(ALL)
 clean:
-	rm -f $(ALL) *.o
+	rm -f $(ALL) *.o *~
 
 bptrace.o: bptrace.c list.h debug.h ../include/bproc.h \
  messages.h
@@ -25,7 +25,7 @@ slave.o: slave.c list.h ../include/bproc.h  \
 bptrace: bptrace.o
 	$(CC) -o $@ $^ 
 
-bpmaster: master.o cmconf.o
+bpmaster: master.o cmconf.o cpio.o -larchive
 	$(CC) $^ -o bpmaster
 bpslave: slave.o  cpio.o
 	$(CC) $^ -o bpslave -larchive
