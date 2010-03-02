@@ -25,8 +25,8 @@ slave.o: slave.c list.h ../include/bproc.h  \
 bptrace: bptrace.o
 	$(CC) -o $@ $^ 
 
-bpmaster: master.o cmconf.o cpio.o -larchive
-	$(CC) $^ -o bpmaster
+bpmaster: master.o cmconf.o cpio.o 
+	$(CC)  $^ -o bpmaster -larchive
 bpslave: slave.o  cpio.o
 	$(CC) $^ -o bpslave -larchive
 

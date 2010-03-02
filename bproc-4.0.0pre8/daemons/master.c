@@ -115,6 +115,19 @@
 #define TIME_ADJ_MIN      10000	/* don't adjust if delta < than this. */
 
 /* slave mode connection state */
+/* Slave controller state */
+struct mymaster_t {
+	struct list_head list;
+	/* Slave information for this master */
+	int index;		/* master number */
+
+	int fd;			/* -1 = no slave daemon present */
+	int attempted;		/*  */
+
+	int naddr;
+	struct sockaddr *addr;
+};
+
 #define conn_out_empty(x) (!(x)->oreq)
 
 struct request_t {
@@ -122,6 +135,7 @@ struct request_t {
 };
 
 #define bproc_msg(req)  ((void *)(req+1))
+static LIST_HEAD(masters);
 static LIST_HEAD(reqs_to_master);
 static LIST_HEAD(reqs_to_masq);
 
@@ -180,7 +194,8 @@ enum fd_type {
 	
 #define IBUFFER_SIZE (sizeof(struct bproc_message_hdr_t) + 64)
 
-/* same struct now for slaves and clients. I've tried both ways and this makes more sense 
+/* same struct now for slaves and clients and masters. I've tried 'case dependent structs' and unions and stuff 
+ * but taking a lesson from Russ Cox's p9p --  make it one struct as it is simple and 
  * because of Erik's really nice code for sucking in bits of a request until it is complete. 
  */
 /* clients that connect over the master file descriptor unix domain socket. 
@@ -1339,13 +1354,6 @@ void config_fixup(void)
 }
 
 static
-int setup_bpfs(void)
-{
-	/* in future, we'll have to do bpfs as a FUSE module */
-	return -1;
-}
-
-static
 int master_config(char *filename)
 {
 	next_node = 0;
@@ -1369,7 +1377,6 @@ int master_config(char *filename)
 	config_free(&conf);
 	conf = tc;		/* Do it! */
 
-	setup_bpfs();
 	setup_fdsets(conf.num_nodes + conf.if_list_size);
 	if (!cookie_seq)
 		cookie_seq = time(0);
@@ -2643,6 +2650,56 @@ int slave_msg_in(struct conn_t *c, struct request_t *req)
 }
 
 /* functions that implement a slave */
+/* managing masters */
+/* there is support here for multiple masters. It is not clear this is a good idea, we may delete it later */
+static
+struct mymaster_t *master_new(void)
+{
+	struct mymaster_t *m;
+	static int index = 0;
+	m = malloc(sizeof(*m));
+	m->index = index++;
+	m->fd = -1;
+	m->naddr = 0;
+	m->attempted = 0;
+	m->addr = 0;
+	list_add_tail(&m->list, &masters);
+	return m;
+}
+
+static
+void master_add_addr(struct mymaster_t *m, struct sockaddr *addr)
+{
+	struct sockaddr *tmp;
+
+	tmp = realloc(m->addr, sizeof(*m->addr) * (m->naddr + 1));
+	if (!tmp) {
+		syslog(LOG_ERR, "Out of memory.");
+		abort();
+	}
+	m->addr = tmp;
+	memcpy(&m->addr[m->naddr], addr, sizeof(*addr));
+	m->naddr++;
+}
+
+static
+struct mymaster_t *master_find_by_addr(struct sockaddr *addr)
+{
+	struct list_head *l;
+	struct mymaster_t *m;
+	int i;
+
+	for (l = masters.next; l != &masters; l = l->next) {
+		m = list_entry(l, struct mymaster_t, list);
+		for (i = 0; i < m->naddr; i++) {
+			if (memcmp(&m->addr[i], addr, sizeof(*addr)) == 0)
+				return m;
+		}
+	}
+	return 0;
+}
+
+
 /* count is text, and ends with a non-numeric e.g. \n or \0
  * source is moved to end
  * err handling later. 
@@ -3636,8 +3693,20 @@ void usage(char *arg0)
 	       arg0, machine_config_file);
 }
 
+/* we've got this great async IO framework. There's no fundamental reason we can't function 
+ * as a master and slave at the same time. So we'll allow it until convinced there is a reason not to. 
+ * We only accept run commands over the Unix Domain Socket and the TCP connection to our master. 
+ * From the UDS we only relay commands to our slaves. Is there a possibility for a cycle in the graph? 
+ * Sort of. You can have cycles that don't include the root. So really it may in the long run be cleaner to 
+ * have it bimodal, and run two copies of it on a tree-spawn node such that the slave relays run commands
+ * to the master over the UDS. Maybe the right thing to do is the symlink trick: as the run requests
+ * transit a master, increment a counter, and don't let them go more than four or five hops. 
+ * At a reasonable fanout of 32, that is 32^5 nodes, or 32M nodes. 
+ */
 int main(int argc, char *argv[])
 {
+	char *check;
+	struct sockaddr_in *addrp, addrtmp;
 	int c, i, j, fd;
 	int want_daemonize = 0;
 	static struct option long_options[] = {
@@ -3645,9 +3714,15 @@ int main(int argc, char *argv[])
 		{"version", 0, 0, 'V'},
 		{0, 0, 0, 0}
 	};
+	unsigned short port = DEFAULT_PORT;
+	struct mymaster_t *master;
+
+	memset(&addrtmp, 0, sizeof(addrtmp));
+	addrp = &addrtmp;
+	addrp->sin_family = AF_INET;
 
 	while ((c =
-		getopt_long(argc, argv, "f:hVc:m:dvi", long_options, 0)) != EOF) {
+		getopt_long(argc, argv, "f:hVc:m:p:s:dvi", long_options, 0)) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(argv[0]);
@@ -3680,6 +3755,21 @@ int main(int argc, char *argv[])
 				close(fd);
 			}
 			break;
+		case 'p':
+			port = strtol(argv[optind + 1], &check, 0);
+			if (*check) {
+				syslog(LOG_ERR, "invalid port number: %s",
+				       argv[optind + 1]);
+				exit(1);
+			}
+			
+		case 's': 
+			if (inet_aton(argv[optind], &addrtmp.sin_addr) == 0) {
+				syslog(LOG_ERR, "Invalid IP address: %s", optarg);
+				exit(1);
+			}
+			slavemode = 1;
+			break;
 		case 'v':
 			verbose++;
 			break;
@@ -3704,16 +3794,27 @@ int main(int argc, char *argv[])
 	if (setup_master_fd())
 		exit(1);
 
-	memset(&conf, 0, sizeof(conf));
-	if (master_config(machine_config_file)) {
-		syslog(LOG_ERR,
-		       "Failed to load machine configuration from \"%s\".",
-		       machine_config_file);
-		exit(1);
+	/* in slavemode, we have no configuration file. We're told where to connect, and any other 
+	 * info comes from the root
+	 */
+	if (! slavemode) {
+		memset(&conf, 0, sizeof(conf));
+		if (master_config(machine_config_file)) {
+			syslog(LOG_ERR,
+			       "Failed to load machine configuration from \"%s\".",
+			       machine_config_file);
+			exit(1);
+		}
+	
+		syslog(LOG_INFO, "machine contains %d nodes", conf.num_nodes);
+	} else {
+		memset(&conf, 0, sizeof(conf));
+		/* connect to the master */
+		addrp->sin_port = htons(port);
+		/* Create the first master with just this address */
+		master = master_new();
+		master_add_addr(master, (struct sockaddr *)&addrtmp);	
 	}
-
-	syslog(LOG_INFO, "machine contains %d nodes", conf.num_nodes);
-
 	connections = calloc(maxfd, sizeof(*connections));
 
 	assoc_init();
