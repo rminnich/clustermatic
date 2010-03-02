@@ -8,6 +8,7 @@
 #include <archive.h>		/* libarchive */
 #include <archive_entry.h>  /* libarchive */
 #include <syslog.h>
+#include <limits.h> /* PATH_MAX */
 #include "cpio.h"
 
 int cpio(void *buf, size_t len, const char *prepend_string) {
@@ -18,7 +19,7 @@ int cpio(void *buf, size_t len, const char *prepend_string) {
 	int count = 0;
 	int flags = ARCHIVE_EXTRACT_TIME;
 	char *tmp;
-	
+
 
 	arch_read = archive_read_new();
 	archive_read_support_format_cpio(arch_read);
@@ -84,24 +85,6 @@ int cpio(void *buf, size_t len, const char *prepend_string) {
 
 	return count;
 }
-struct cpio {
-	/* Options */
-	const char *filename;
-	const char *format; /* -H format */
-	int       bytes_per_block; /* -b block_size */
-	int       extract_flags; /* Flags for extract operation */
-	int fd;
-
-	/* Miscellaneous state information */
-	struct archive *archive;
-	struct archive_entry_linkresolver *linkresolver;
-
-	/* Work data. */
-	char         *buff;
-	size_t        buff_size;
-};
-
-
 
 static int entry_to_archive(struct cpio *cpio, struct archive_entry *entry) {
 	const char *destpath = archive_entry_pathname(entry);
@@ -174,7 +157,7 @@ static int file_to_archive(struct cpio *cpio, const char *srcpath) {
 	archive_entry_copy_sourcepath(entry, srcpath);
 
 	/* Get stat information. */
-	r = stat(srcpath, &st);
+	r = lstat(srcpath, &st);
 	if (r != 0) {
 		warn("Couldn't stat \"%s\"", srcpath);
 		archive_entry_free(entry);
@@ -220,19 +203,121 @@ static int file_to_archive(struct cpio *cpio, const char *srcpath) {
 	return (r);
 }
 
-void* cpio_create(char **filenames, int elements) {
+static int search_list(char **filenames, int num, const char *search_string) {
+	int i;
+	for (i = 0; i < num; i++) {
+		if (strcmp(search_string, filenames[i]) == 0) {
+			return 1;
+		}
+	}
+	/* file not found in list */
+	return 0;
+}
+
+/* Returns the total number of added files */
+static int add_linkfile(const char* path, char ***filenames_, int total_files) {
+	char **filenames = *filenames_;
+	struct stat st;
+	int i;
+	int total_added_files = 0;
+	int last_slash = 0;
+
+	char *read_link_buffer = calloc(1,PATH_MAX);
+	char *tmp_buf1 = calloc(1,PATH_MAX);
+	char *tmp_buf2 = calloc(1,PATH_MAX);
+
+	if (read_link_buffer == NULL || tmp_buf1 == NULL || tmp_buf2 == NULL) {
+		return -1;
+	}
+
+//	printf("%s\n", path);
+	/* Search to see if filename is already in the list. If not add it. */
+	if (search_list(*filenames_, total_files, path) == 0) {
+		if ((filenames = (char**)realloc(filenames, sizeof(char**) * (total_files + 1))) == NULL) {
+			fprintf(stderr, "realloc failed\n");
+			return -1;
+		}
+		*filenames_ = filenames;
+		filenames[total_files] = (char*)calloc(1, strlen(path) + 1);
+		strcpy(filenames[total_files], path);
+		total_added_files++;
+	}
+
+	/* Readlink */
+	if (lstat(path, &st) < 0) {
+		fprintf(stderr, "lstat failed\n");
+		return -1;
+	}
+	if (S_ISLNK(st.st_mode)) {
+		if (readlink(path, read_link_buffer, PATH_MAX) < 0) {
+			fprintf(stderr, "realink failed\n");
+			return -1;
+		}
+
+		/* if file is not the connonical full name then prepend with path */
+		if (read_link_buffer[0] != '/') {
+			for (i=0; path[i] != '\0'; i++) {
+				if (path[i] == '/')  {
+					last_slash = i;
+				}
+			}
+			last_slash++;
+			memcpy(tmp_buf1, path, last_slash);
+			memcpy(tmp_buf2 + last_slash, read_link_buffer, strlen(read_link_buffer));
+			memcpy(tmp_buf2, tmp_buf1, last_slash);
+			tmp_buf2[last_slash + strlen(read_link_buffer)] = '\0';
+
+			free(read_link_buffer);
+			free(tmp_buf1);
+
+			read_link_buffer = tmp_buf2;
+
+			tmp_buf1 = NULL;
+			tmp_buf2 = NULL;
+		}
+		total_added_files += add_linkfile(read_link_buffer, filenames_, total_files + total_added_files);
+	}
+	return total_added_files;
+}
+
+/* Creates a cpio archive in memory and sets the buf pointer and the resulting buf size
+ * Input:
+ *   char ***filenames:  Should be an array of filenames
+ *   int total_files:    Total number of files in the array
+ *   void **cpio_buf:    Ptr to where the cpio buffer will be stored
+ *   int *cpio_buf_size: Ptr to the size of the cpio buffer
+ * Output:
+ *   char ***filenames:  Any additional sym resolved links will be added to the end of the list
+ *   int total_files:    *total_files will have the total # of files, including new addtions
+ *   void **cpio_buf:    *cpio_buf will point to the cpio buffer in memory
+ *   int *cpio_buf_size: *cpio_buf_size will stove  the size of the cpio buffer
+ * Returns:
+ *  -1 on error, 0 on success */
+int cpio_create(char ***filenames_, int *total_files_, void **cpio_buf, int *cpio_buf_size) {
+	char **filenames = *filenames_;
+	int total_files = *total_files_;
 	struct cpio *cpio;
 	struct archive_entry *entry, *spare;
 	int r, i;
-	static char buff[16384];
-	int output_buf_size = 33554432;
-	char *output_buf = calloc(1, output_buf_size);
+	static char buf[16384];
+	int output_buf_size = 33554432; /* MAX cpio buffer size */
 	size_t output_buf_used = 0;
+	struct stat st;
+	char *output_buf = calloc(1, output_buf_size);
 
-	cpio = calloc(1, sizeof(struct cpio));
+	if (output_buf == NULL) {
+		fprintf(stderr, "Failed to allocate buffer \n");
+		return -1;
+	}
 
-	cpio->buff = buff;
-	cpio->buff_size = sizeof(buff);
+	if ((cpio = calloc(1, sizeof(struct cpio))) == NULL) {
+		fprintf(stderr, "Malloc failed\n");
+		return -1;
+	}
+
+	/* Flags that will be used by archive */
+	cpio->buff = buf;
+	cpio->buff_size = sizeof(buf);
 	cpio->format = "newc";
 	cpio->extract_flags = ARCHIVE_EXTRACT_NO_AUTODIR;
 	cpio->extract_flags |= ARCHIVE_EXTRACT_NO_OVERWRITE_NEWER;
@@ -244,30 +329,67 @@ void* cpio_create(char **filenames, int elements) {
 	cpio->bytes_per_block = 512;
 	cpio->filename = NULL;
 
-	cpio->archive = archive_write_new();
-	if (cpio->archive == NULL)
-		errx(1, "Failed to allocate archive object");
+	/* Scan filenames looking for symlinks */
+	int count = 0;
+	for (i=0; i < total_files; i++) {
+		if (lstat(filenames[i], &st) < 0) {
+			fprintf(stderr, "lstat failed\n");
+			return -1;
+		}
+		if (S_ISLNK(st.st_mode)) {
+			count = add_linkfile(filenames[i], filenames_, total_files);
+			filenames = *filenames_;
+		}
+	}
+	total_files += count;
+//	printf("\nReturned %d\n", elements);
 
+	/* For debugging print what you have in the list */
+#if 0
+	for (i=0; i < total_files; i++) {
+		printf("%s\n", filenames[i]);
+	}
+#endif
+
+	/* Create a new archive object */
+	cpio->archive = archive_write_new();
+	if (cpio->archive == NULL) {
+		fprintf(stderr, "Failed to allocate archive object");
+		return -1;
+	}
+
+	/* Set format */
 	r = archive_write_set_format_by_name(cpio->archive, cpio->format);
-	if (r != ARCHIVE_OK)
-		errx(1, "%s", archive_error_string(cpio->archive));
+	if (r != ARCHIVE_OK) {
+		fprintf(stderr, "%s", archive_error_string(cpio->archive));
+		return -1;
+	}
+
+	/* Set bytes per block */
 	archive_write_set_bytes_per_block(cpio->archive, cpio->bytes_per_block);
+
+	/* Create a lookup object */
 	cpio->linkresolver = archive_entry_linkresolver_new();
 	archive_entry_linkresolver_set_strategy(cpio->linkresolver, archive_format(cpio->archive));
 
+	/* Open memory region to write archive into */
 	r = archive_write_open_memory(cpio->archive, output_buf, output_buf_size, &output_buf_used);
 	if (r != ARCHIVE_OK) {
-		errx(1, "%s", archive_error_string(cpio->archive));
+		fprintf(stderr, "%s", archive_error_string(cpio->archive));
+		return -1;
+	}
+	if (r > output_buf_size) {
+		fprintf(stderr, "We've exceeded the max buffer size!\n");
+		return -1;
 	}
 
-	for (i = 0; i < elements; i++) {
+	/* Archive the list of files */
+	for (i = 0; i < total_files; i++) {
 		file_to_archive(cpio, filenames[i]);
 	}
 
-	/*
-	 * The hardlink detection may have queued up a couple of entries
-	 * that can now be flushed.
-	 */
+	/* The hardlink detection may have queued up a couple of entries
+	 * that can now be flushed. */
 	entry = NULL;
 	archive_entry_linkify(cpio->linkresolver, &entry, &spare);
 	while (entry != NULL) {
@@ -277,12 +399,20 @@ void* cpio_create(char **filenames, int elements) {
 		archive_entry_linkify(cpio->linkresolver, &entry, &spare);
 	}
 
+	/* Complete the archive and invoke the close callback */
 	r = archive_write_close(cpio->archive);
-	if (r != ARCHIVE_OK)
-		errx(1, "%s", archive_error_string(cpio->archive));
+	if (r != ARCHIVE_OK) {
+		fprintf(stderr, "%s\n", archive_error_string(cpio->archive));
+		return -1;
+	}
 
+	/* Releases all resources */
 	archive_write_finish(cpio->archive);
-//	write(1, output_buf, output_buf_used);
+
+	/* Set the return pointers */
+	*cpio_buf_size = output_buf_used;
+	*cpio_buf = output_buf;
+	*total_files_ = total_files;
 
 	return 0;
 }
