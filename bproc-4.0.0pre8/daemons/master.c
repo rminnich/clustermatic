@@ -3387,7 +3387,6 @@ syslog(LOG_NOTICE, "DONE CONF");
 	case BPROC_NODE_PING:{
 			struct bproc_ping_msg_t *msg;
 syslog(LOG_NOTICE, "PING");
-			return 1;
 			msg = bproc_msg(req);
 			update_system_time(msg->time_sec, msg->time_usec);
 			conn_respond(c, req, 0);
@@ -3451,6 +3450,8 @@ void conn_err(struct conn_t *conn)
 	if (conn->type == SLAVE) {
 		struct node_t *s = conn->node;
 		syslog(LOG_ERR, "lost connection to slave %d", s->id);
+	} else if (conn->type == MASTER) {
+		syslog(LOG_ERR, "lost connection to master");
 	} else {
 		syslog(LOG_ERR, "lost connection to client");
 	}
