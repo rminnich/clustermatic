@@ -114,20 +114,6 @@
 #define TIME_ADJ_COMPLAIN 50000	/* bitch if time adjustment is > this (us). */
 #define TIME_ADJ_MIN      10000	/* don't adjust if delta < than this. */
 
-/* slave mode connection state */
-/* Slave controller state */
-struct mymaster_t {
-	struct list_head list;
-	/* Slave information for this master */
-	int index;		/* master number */
-
-	int fd;			/* -1 = no slave daemon present */
-	int attempted;		/*  */
-
-	int naddr;
-	struct sockaddr *addr;
-};
-
 #define conn_out_empty(x) (!(x)->oreq)
 
 struct request_t {
@@ -270,6 +256,20 @@ struct interface_t {
 	struct sockaddr_in addr;
 };
 
+/* slave mode connection state */
+/* Slave controller state */
+struct mymaster_t {
+	struct list_head list;
+	/* Slave information for this master */
+	int index;		/* master number */
+
+	int fd;			/* -1 = no slave daemon present */
+	int attempted;		/*  */
+
+	int naddr;
+	struct sockaddr *addr;
+};
+
 /* struct master_t - this struct holds groups of addresses for other
  * master nodes in the system.  There's one array of these things.
  * The tag marks the group.  This is stored this way so that it will
@@ -308,6 +308,7 @@ struct config_t conf;
 static time_t cookie_seq = 0;
 static char *log_arg0;
 static int log_opts;
+char *udsname = "/tmp/bpmaster";
 
 static int ignore_version = 1;
 static int clientconnect;	/*, listenfd; */
@@ -324,7 +325,6 @@ static struct conn_t *conn_out = 0, *conn_in = 0;
 static int ping_timeout = DEFAULT_PING_TIMEOUT;
 static int node_number = BPROC_NODE_NONE;
 static time_t lastping;
-static int manager_fd;
 static int private_namespace = -1;
 static char *log_ident;
 static int log_facility = LOG_DAEMON;
@@ -395,7 +395,7 @@ void _msgtrace(int tofrom, struct conn_t *conn, struct request_t *req)
 
 	gettimeofday(&dbg.time, 0);
 	dbg.tofrom = tofrom;
-	dbg.node = conn ? conn->node->id : -1;
+	dbg.node = conn  && conn->node ? conn->node->id : -1;
 	dbg.connection = conn;
 	msg = bproc_msg(req);
 
@@ -409,7 +409,7 @@ void _msgtrace(int tofrom, struct conn_t *conn, struct request_t *req)
 static inline void *smalloc(size_t size)
 {
 	void *tmp;
-	tmp = malloc(size);
+	tmp = calloc(1, size);
 	if (!tmp) {
 		syslog(LOG_EMERG, "Out of memory. (alloc=%ld)", (long)size);
 		assert(0);
@@ -2699,6 +2699,50 @@ struct mymaster_t *master_find_by_addr(struct sockaddr *addr)
 	return 0;
 }
 
+static struct conn_t *conn_new(struct sockaddr_in *raddr, struct sockaddr_in *laddr);
+
+static
+int slave_setup(struct sockaddr_in *remaddr, struct sockaddr_in *locaddr)
+{
+	struct conn_t *newc;
+
+	newc = conn_new((struct sockaddr_in *)remaddr,
+			(struct sockaddr_in *)locaddr);
+	if (!newc)
+		return -1;
+
+	return 0;
+
+}
+
+/* we don't fork per slave in this version. We add a new active fd per slave. */
+static
+int start_slave(struct mymaster_t *master)
+{
+	int i;
+	struct sockaddr_in local_addr;
+
+	memset(&local_addr, 0, sizeof(local_addr));
+	if (verbose)
+		syslog(LOG_INFO, "Starting new slave %d", master->index);
+
+	master->attempted = 1;
+
+	/* Start trying to connect */
+	for (i = 0; i < master->naddr; i++) {
+		local_addr.sin_family = AF_INET;
+		local_addr.sin_addr.s_addr = INADDR_ANY;
+		if (slave_setup((struct sockaddr_in *)&master->addr[i], &local_addr) == 0)
+			break;
+	}
+	if (i == master->naddr) {	/* failure */
+		syslog(LOG_DEBUG, "Slave setup failed.");
+		exit(1);
+	}
+
+//	nslaves++;
+	return 0;
+}
 
 /* count is text, and ends with a non-numeric e.g. \n or \0
  * source is moved to end
@@ -2898,6 +2942,7 @@ do_run(struct conn_t *c, struct request_t *req)
 	void *stack;
 	struct runargs *r;
 
+	syslog(LOG_NOTICE, "do_run: startup");
 	r = malloc(sizeof(*r));
 	if (! r)  {
 		fprintf(stderr, "Out of memory.\n");
@@ -3008,12 +3053,11 @@ void do_node_reboot(struct request_t *req)
 	}
 }
 
-
+static void conn_respond(struct conn_t *c, struct request_t *req, int err);
 /* no real connection list yet. Ignore for now */
 static
 void set_running(struct conn_t *conn)
 {
-
 	struct conn_t *c;
 	int addrsize;
 	struct sockaddr addr;
@@ -3030,12 +3074,6 @@ void set_running(struct conn_t *conn)
 	conn_out = conn;
 	if (!conn_in)
 		conn_in = conn;
-
-	if (conn->ireq) {
-		respond(conn->ireq, 0);
-		free(conn->ireq);
-		conn->ireq = 0;
-	}
 
 	/* Update address information for our procs */
 	addrsize = sizeof(addr);
@@ -3114,7 +3152,8 @@ void update_system_time(long time_sec, long time_usec)
 	lastping = sys_time / 1000000;
 }
 
-/* special functions for slave IO to master. These need to be merged at some point. */
+/* special functions for slave IO to master. These need to be merged at some point. It may not be possible as the 
+ * behavior is very different from slave io to master io. */
 static
 void conn_respond(struct conn_t *c, struct request_t *req, int err)
 {
@@ -3129,13 +3168,125 @@ void conn_respond(struct conn_t *c, struct request_t *req, int err)
 }
 
 static
+void conn_send_version(struct conn_t *c)
+{
+	struct request_t *req;
+	struct bproc_version_msg_t *msg;
+
+	req = bproc_new_req(BPROC_VERSION, sizeof(*msg));
+	msg = bproc_msg(req);
+	bpr_from_node(msg, node_number);	/* no reasonable value here... */
+	bpr_to_node(msg, -1);
+	memcpy(&msg->vers, &version, sizeof(version));
+	msg->cookie = cookie;
+
+	conn_send(c, req);
+}
+
+
+static
+struct conn_t *conn_new(struct sockaddr_in *raddr, struct sockaddr_in *laddr)
+{
+	struct conn_t *c;
+	int fd;
+	int lsize, errnosave;
+	struct sockaddr_in tmp;
+	struct epoll_event ev;
+
+	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+		errnosave = errno;
+		syslog(LOG_ERR, "socket: %s", strerror(errno));
+		errno = errnosave;
+		return 0;
+	}
+
+	c = &connections[fd];
+	memset(c, 0, sizeof(*c));
+	c->fd = fd;
+	c->type = MASTER;
+	c->state = CONN_NEW;
+	c->ctime = time(0);
+
+	/* I/O buffering */
+	INIT_LIST_HEAD(&c->backlog);
+	INIT_LIST_HEAD(&c->reqs);
+	c->ioffset = 0;
+	c->ireq = 0;
+	c->ooffset = 0;
+	c->oreq = 0;
+
+	/* not yet 
+	set_non_block(c->fd);
+	 */
+
+	tmp = *laddr;		/* use a temp here because
+				 * bindresvport writes it. */
+	if (laddr->sin_port || bindresvport(c->fd, &tmp) == -1) {
+		syslog(LOG_ERR, "bindresvport: %s (ignoring)", strerror(errno));
+		/* If we specified a port or failed to bind to a reserved
+		 * port for some reason, try a normal bind. */
+		if (bind(c->fd, (struct sockaddr *)laddr, sizeof(*laddr)) == -1) {
+			errnosave = errno;
+			syslog(LOG_ERR, "bind(%s:%d): %s (ignoring)",
+			       inet_ntoa(laddr->sin_addr),
+			       ntohs(laddr->sin_port), strerror(errno));
+			close(c->fd);
+			errno = errnosave;
+			return 0;
+		}
+	}
+
+	if (verbose)
+		syslog(LOG_INFO, "Connecting to %s:%d...",
+		       inet_ntoa(raddr->sin_addr), ntohs(raddr->sin_port));
+
+	if (connect(c->fd, (struct sockaddr *)raddr, sizeof(*raddr)) == -1) {
+		if (errno != EINPROGRESS) {
+			errnosave = errno;
+			syslog(LOG_ERR, "connect(%s:%d): %s",
+			       inet_ntoa(raddr->sin_addr),
+			       ntohs(raddr->sin_port), strerror(errno));
+			close(c->fd);
+			errno = errnosave;
+			return 0;
+		}
+	}
+
+	/* Make note of our local address */
+	lsize = sizeof(c->laddr);
+	getsockname(c->fd, (struct sockaddr *)&c->laddr, &lsize);
+	c->raddr = raddr->sin_addr;
+
+	/* Add this FD to our world */
+	ev.events = 0;
+	ev.data.u32 = EV(MASTER, c->fd);
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, c->fd, &ev)) {
+		syslog(LOG_ERR, "epoll_ctl(EPOLL_CTL_ADD, %d, %p): %s", c->fd, &ev,
+		       strerror(errno));
+		(void)close(c->fd);
+		c->fd = -1;
+	}
+
+	/* Prime output buffer with version information and cookie */
+	conn_send_version(c);
+
+	set_keep_alive(c->fd);
+	set_no_delay(c->fd);
+	set_non_block(c->fd);
+
+	/* Append to list of connections */
+	list_add_tail(&c->list, &clist);
+	return c;
+}
+
+static
 void conn_remove(struct conn_t *conn, int reason)
 {
 	list_del(&conn->list);	/* remove from connection list */
 
 	if (conn->ireq) {
 		syslog(LOG_NOTICE, "Reconnect failed: %s\n", strerror(reason));
-		respond(conn->ireq, -reason);
+		conn_respond(conn, conn->ireq, -reason);
 		free(conn->ireq);
 		conn->ireq = 0;
 	}
@@ -3152,13 +3303,12 @@ void conn_remove(struct conn_t *conn, int reason)
 			if (c->ireq)
 				free(c->ireq);
 			close(c->fd);
-			free(c);
 		}
 	}
 	if (conn->ireq)
 		free(conn->ireq);
 	close(conn->fd);
-	free(conn);
+	conn->fd = -1;
 }
 
 /* what is this for, precisely? */
@@ -3182,6 +3332,8 @@ int master_msg_in(struct conn_t *c, struct request_t *req)
 	msgtrace(BPROC_DEBUG_MSG_FROM_MASTER, NULL, req);
 
 	hdr = bproc_msg(req);
+syslog(LOG_NOTICE, "master_msg_in: conn %p req %p type %d", c, req, hdr->req);
+
 	switch (hdr->req) {
 	case BPROC_VERSION:{
 			struct bproc_version_msg_t *msg =
@@ -3203,7 +3355,7 @@ int master_msg_in(struct conn_t *c, struct request_t *req)
 					return -1;
 			}
 			cookie = msg->cookie;
-			free(req);
+			req_free(req);
 		}
 		return 1;
 	case BPROC_NODE_CONF:{
@@ -3216,28 +3368,6 @@ int master_msg_in(struct conn_t *c, struct request_t *req)
 
 			update_system_time(msg->time_sec, msg->time_usec);
 
-			/* This only gets setup on the FIRST conf message - we can't
-			 * be flipping file system name spaces around. */
-			if (private_namespace == -1) {
-				private_namespace =
-				    msg->private_namespace ? 1 : 0;
-				if (private_namespace) {
-					syslog(LOG_NOTICE,
-					       "Setting up private FS name space.");
-					privatize_namespace();
-				}
-			} else {
-				static int complained = 0;
-				if (private_namespace != msg->private_namespace
-				    && !complained) {
-					complained = 1;
-					syslog(LOG_WARNING,
-					       "private namespace option changed.  This "
-					       "option cannot be changed without starting the slave "
-					       "daemon.");
-				}
-			}
-
 			/* Update configuration details */
 			if (msg->hdr.to != node_number) {
 				node_number = msg->hdr.to;
@@ -3249,21 +3379,19 @@ int master_msg_in(struct conn_t *c, struct request_t *req)
 				syslog(LOG_NOTICE, "Setting ping timeout to %d",
 				       ping_timeout);
 			}
+syslog(LOG_NOTICE, "DONE CONF");
 
-			/* Pass master list up to the slave manager */
-			write(manager_fd, &msg->masters_size,
-			      sizeof(msg->masters_size));
-			write(manager_fd, ((void *)msg) + msg->masters,
-			      msg->masters_size *
-			      sizeof(struct bproc_master_t));
-			free(req);
+			conn_respond(c, req, 0);
+			req_free(req);
 		} return 1;
 	case BPROC_NODE_PING:{
 			struct bproc_ping_msg_t *msg;
+syslog(LOG_NOTICE, "PING");
+			return 1;
 			msg = bproc_msg(req);
 			update_system_time(msg->time_sec, msg->time_usec);
 			conn_respond(c, req, 0);
-			free(req);
+			req_free(req);
 		} return 1;
 	case BPROC_NODE_EOF:
 		/* not sure yet. 
@@ -3272,14 +3400,14 @@ int master_msg_in(struct conn_t *c, struct request_t *req)
 			       "Received EOF on non-closing connection.");
 		*/
 		conn_remove(c, 0);
-		free(req);
+		req_free(req);
 		return 0;
 
 	/*--- Node commands ---*/
 	case BPROC_NODE_CHROOT:
 		/* not really supported */
 		//do_slave_chroot(req);
-		free(req);
+		req_free(req);
 		return 1;
 	case BPROC_NODE_RECONNECT:
 		reconnect(c, req);
@@ -3289,11 +3417,12 @@ int master_msg_in(struct conn_t *c, struct request_t *req)
 	case BPROC_NODE_HALT:
 	case BPROC_NODE_PWROFF:
 		do_node_reboot(req);
-		free(req);
+		req_free(req);
 		return 1;
 
 	/* --- Process commands ---*/
 	case BPROC_RUN:
+		syslog(LOG_NOTICE, "RUN command");
 		do_run(c, req);
 		return 1;
 	default:
@@ -3309,8 +3438,10 @@ int conn_msg_in(struct conn_t *c, struct request_t *req)
 	int ret;
 	if (c->type == SLAVE)
 		ret = slave_msg_in(c, req);
-	else
+	else if (c->type == CLIENT)
 		ret = client_msg_in(c, req);
+	else
+		ret = master_msg_in(c, req);
 	return ret;
 }
 
@@ -3596,7 +3727,7 @@ int setup_master_fd(void)
 	struct sockaddr_un sun;
 
  /*** set up socket crud ***/
-	unlink("/tmp/bpmaster");
+	unlink(udsname);
 
 	while ((clientconnect = socket(PF_UNIX, SOCK_STREAM, 0)) == -1) {
    /*** with respect to BProc slaves, we need to wait ***/
@@ -3610,7 +3741,7 @@ int setup_master_fd(void)
 	}
 
 	sun.sun_family = AF_UNIX;
-	strcpy(sun.sun_path, "/tmp/bpmaster");
+	strcpy(sun.sun_path, udsname);
 	umask(000);
 	if (bind(clientconnect, (struct sockaddr *)&sun, sizeof(sun)) != 0) {
 		perror("bind");
@@ -3715,14 +3846,14 @@ int main(int argc, char *argv[])
 		{0, 0, 0, 0}
 	};
 	unsigned short port = DEFAULT_PORT;
-	struct mymaster_t *master;
+	struct mymaster_t *master = NULL;
 
 	memset(&addrtmp, 0, sizeof(addrtmp));
 	addrp = &addrtmp;
 	addrp->sin_family = AF_INET;
 
 	while ((c =
-		getopt_long(argc, argv, "f:hVc:m:p:s:dvi", long_options, 0)) != EOF) {
+		getopt_long(argc, argv, "f:hVc:m:p:s:dviu:", long_options, 0)) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(argv[0]);
@@ -3756,7 +3887,7 @@ int main(int argc, char *argv[])
 			}
 			break;
 		case 'p':
-			port = strtol(argv[optind + 1], &check, 0);
+			port = strtol(optarg, &check, 0);
 			if (*check) {
 				syslog(LOG_ERR, "invalid port number: %s",
 				       argv[optind + 1]);
@@ -3764,7 +3895,7 @@ int main(int argc, char *argv[])
 			}
 			
 		case 's': 
-			if (inet_aton(argv[optind], &addrtmp.sin_addr) == 0) {
+			if (inet_aton(optarg, &addrtmp.sin_addr) == 0) {
 				syslog(LOG_ERR, "Invalid IP address: %s", optarg);
 				exit(1);
 			}
@@ -3775,6 +3906,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'd':
 			want_daemonize = 0;
+			break;
+		case 'u':
+			udsname = optarg;
 			break;
 		default:
 			exit(1);
@@ -3794,31 +3928,29 @@ int main(int argc, char *argv[])
 	if (setup_master_fd())
 		exit(1);
 
-	/* in slavemode, we have no configuration file. We're told where to connect, and any other 
-	 * info comes from the root
-	 */
-	if (! slavemode) {
-		memset(&conf, 0, sizeof(conf));
-		if (master_config(machine_config_file)) {
-			syslog(LOG_ERR,
-			       "Failed to load machine configuration from \"%s\".",
-			       machine_config_file);
-			exit(1);
-		}
+	memset(&conf, 0, sizeof(conf));
+	if (master_config(machine_config_file)) {
+		syslog(LOG_ERR,
+		       "Failed to load machine configuration from \"%s\".",
+		       machine_config_file);
+		exit(1);
+	}
 	
-		syslog(LOG_INFO, "machine contains %d nodes", conf.num_nodes);
-	} else {
-		memset(&conf, 0, sizeof(conf));
+	syslog(LOG_INFO, "machine contains %d nodes", conf.num_nodes);
+	if (slavemode) {
 		/* connect to the master */
 		addrp->sin_port = htons(port);
 		/* Create the first master with just this address */
 		master = master_new();
-		master_add_addr(master, (struct sockaddr *)&addrtmp);	
+		master_add_addr(master, (struct sockaddr *)&addrtmp);
 	}
 	connections = calloc(maxfd, sizeof(*connections));
 
 	assoc_init();
 	client_init();
+
+	if (master)
+		start_slave(master);
 
 	signal(SIGCHLD, SIG_IGN);
 	signal(SIGPIPE, SIG_IGN);
@@ -3873,6 +4005,8 @@ int main(int argc, char *argv[])
 			    lastping +
 			    conf.ping_timeout / 2 ? 0 : conf.ping_timeout / 2 -
 			    (now - lastping);
+			if (timeleft.tv_sec == 0)
+				timeleft.tv_sec = 2;
 			timeleft.tv_usec = 0;
 
 			sigprocmask(SIG_UNBLOCK, &sigset, 0);
@@ -3912,6 +4046,13 @@ int main(int argc, char *argv[])
 						conn_write(conn);
 						conn_update_epoll(conn);
 						break;
+					case MASTER:
+						conn = &connections[whatfd];
+						if (conn->state == CONN_DEAD)
+							break;
+						conn_write(conn);
+						conn_update_epoll(conn);
+						break;
 					}
 				}
 				if (epoll_events[i].events & EPOLLIN) {
@@ -3938,6 +4079,13 @@ int main(int argc, char *argv[])
 									 [j]);
 						break;
 					case SLAVE:
+						conn = &connections[whatfd];
+						if (conn->state == CONN_DEAD)
+							break;
+						conn_read(conn);
+						conn_update_epoll(conn);
+						break;
+					case MASTER:
 						conn = &connections[whatfd];
 						if (conn->state == CONN_DEAD)
 							break;

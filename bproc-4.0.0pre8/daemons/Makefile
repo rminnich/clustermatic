@@ -26,7 +26,7 @@ bptrace: bptrace.o
 	$(CC) -o $@ $^ 
 
 bpmaster: master.o cmconf.o cpio.o 
-	$(CC)  $^ -o bpmaster -larchive
+	$(CC)  -static $^ -o bpmaster -larchive -lacl
 bpslave: slave.o  cpio.o
 	$(CC) $^ -o bpslave -larchive
 
