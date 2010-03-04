@@ -1,3 +1,6 @@
+NOTE: We've moved to bitbucket/mercurial and away from git. See: 
+http://bitbucket.org/rminnich/clustermatic/ for the latest. 
+
 This is a revival of the LANL CM5 code, for the simple reason that we still
 can't find anything that works better. We're going to remove all bproc 
 dependencies because that kernel support will probably never happen, and 
